@@ -79,18 +79,18 @@ async def lifespan(app: FastAPI):
     global rag_processor, document_preprocessor
     
     # Startup
-    print("🚀 Initializing Advanced RAG System...")
+    print("Initializing Advanced RAG System...")
     rag_processor = AdvancedRAGProcessor()  # Use advanced processor for better accuracy
     document_preprocessor = DocumentPreprocessor()
-    print("✅ Advanced RAG System initialized successfully")
+    print("Advanced RAG System initialized successfully")
     
     yield
     
     # Shutdown
-    print("🔄 Shutting down RAG System...")
+    print("Shutting down RAG System...")
     if rag_processor:
         rag_processor.cleanup()
-    print("✅ Cleanup completed")
+    print("Cleanup completed")
 
 # FastAPI app with lifespan management
 app = FastAPI(
@@ -115,18 +115,6 @@ async def process_document(
 ):
     """
     Process a PDF document and answer questions about it.
-    
-    This endpoint implements an optimized flow:
-    1. Check if the document is already processed (pre-computed embeddings)
-    2. If yes, use existing embeddings for fast retrieval + generation
-    3. If no, run full RAG pipeline (download + process + embed + store + answer)
-    
-    Args:
-        request: Contains document URL and list of questions
-        token: Bearer token for authentication
-        
-    Returns:
-        ProcessDocumentResponse: List of answers corresponding to the questions
     """
     global rag_processor, document_preprocessor
     
@@ -145,17 +133,17 @@ async def process_document(
     error_message = None
     doc_id = None
     was_preprocessed = False
-    final_answers = []  # Initialize final_answers to prevent UnboundLocalError
+    final_answers = [] 
     
     # Initialize enhanced logging
     request_id = rag_logger.generate_request_id()
     rag_logger.start_request_timing(request_id)
     
     try:
-        print(f"📋 [{request_id}] Processing document: {document_url[:50]}...")
-        print(f"🤔 [{request_id}] Number of questions: {len(questions)}")
+        print(f"[{request_id}] Processing document: {document_url}...")
+        print(f"[{request_id}] Number of questions: {len(questions)}")
         print(f"")
-        print(f"📌 [{request_id}] PRIORITY 1: Checking stored embeddings database...")
+        print(f"[{request_id}] PRIORITY 1: Checking stored embeddings database...")
         
         # Generate document ID
         doc_id = document_preprocessor.generate_doc_id(document_url)
@@ -165,14 +153,14 @@ async def process_document(
         was_preprocessed = is_processed
         
         if is_processed:
-            print(f"✅ [{request_id}] ✅ FOUND STORED EMBEDDINGS for {doc_id}")
-            print(f"⚡ [{request_id}] Using fast path with pre-computed embeddings")
+            print(f"[{request_id}] ✅ FOUND STORED EMBEDDINGS for {doc_id}")
+            print(f"[{request_id}] Using fast path with pre-computed embeddings")
             # Fast path: Use existing embeddings
             doc_info = document_preprocessor.get_document_info(document_url)
-            print(f"📊 [{request_id}] Using existing collection with {doc_info.get('chunk_count', 'N/A')} chunks")
+            print(f"[{request_id}] Using existing collection with {doc_info.get('chunk_count', 'N/A')} chunks")
         else:
             print(f"❌ [{request_id}] No stored embeddings found for {doc_id}")
-            print(f"📌 [{request_id}] PRIORITY 2: Running full RAG pipeline (download + process + embed)...")
+            print(f"[{request_id}] PRIORITY 2: Running full RAG pipeline (download + process + embed)...")
             # Full path: Download and process document
             resp = await document_preprocessor.process_document(document_url)
             if isinstance(resp, List):

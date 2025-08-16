@@ -47,12 +47,6 @@ class MetadataManager:
     def generate_doc_id(self, document_url: str) -> str:
         """
         Generate a unique document ID from the URL.
-        
-        Args:
-            document_url: URL of the document
-            
-        Returns:
-            str: Unique document ID
         """
         url_hash = hashlib.md5(document_url.encode()).hexdigest()[:12]
         return f"doc_{url_hash}"
@@ -60,12 +54,6 @@ class MetadataManager:
     def is_document_processed(self, document_url: str) -> bool:
         """
         Check if a document has already been processed.
-        
-        Args:
-            document_url: URL of the document
-            
-        Returns:
-            bool: True if document is already processed
         """
         doc_id = self.generate_doc_id(document_url)
         return doc_id in self.processed_docs
@@ -73,12 +61,6 @@ class MetadataManager:
     def get_document_info(self, document_url: str) -> Dict[str, Any]:
         """
         Get information about a processed document.
-        
-        Args:
-            document_url: URL of the document
-            
-        Returns:
-            Dict[str, Any]: Document information or empty dict if not found
         """
         doc_id = self.generate_doc_id(document_url)
         return self.processed_docs.get(doc_id, {})
@@ -141,12 +123,6 @@ class MetadataManager:
     def get_document_metadata(self, doc_id: str) -> Dict[str, Any]:
         """
         Load individual document metadata from file.
-        
-        Args:
-            doc_id: Document identifier
-            
-        Returns:
-            Dict[str, Any]: Document metadata or empty dict if not found
         """
         metadata_path = self.base_db_path / f"{doc_id}_metadata.json"
         
@@ -163,7 +139,6 @@ class MetadataManager:
     def list_processed_documents(self) -> Dict[str, Dict]:
         """
         List all processed documents.
-        
         Returns:
             Dict[str, Dict]: Copy of processed documents registry
         """

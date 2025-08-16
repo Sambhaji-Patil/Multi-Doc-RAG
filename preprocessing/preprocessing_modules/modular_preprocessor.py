@@ -115,7 +115,7 @@ class ModularDocumentPreprocessor:
 
             # Step 2: Extract text
             full_text = ""
-            match ext:
+            match ext.lower():
                 case 'pdf':
                     full_text = self.text_extractor.extract_text_from_pdf(temp_file_path)
                 

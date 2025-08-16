@@ -74,7 +74,7 @@ class FileDownloader:
                         if not ext:
                             return url, "url"
 
-                        if ext not in ['.pdf', '.docx', '.pptx', '.png', '.xlsx', '.jpeg', '.jpg', '.txt', '.csv']:
+                        if ext.lower() not in ['.pdf', '.docx', '.pptx', '.png', '.xlsx', '.jpeg', '.jpg', '.txt', '.csv']:
                             print(f"   ❌ File type not supported: {ext}")
                             return ['not supported', ext.lstrip('.')]
 
