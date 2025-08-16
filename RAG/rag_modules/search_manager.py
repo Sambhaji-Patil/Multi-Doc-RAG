@@ -75,10 +75,10 @@ class SearchManager:
                     'tokenized_chunks': tokenized_chunks
                 }
                 
-                print(f"✅ BM25 index loaded for {doc_id} with {len(chunks)} chunks")
+                print(f"🟢-> BM25 index loaded for {doc_id} with {len(chunks)} chunks")
                 
             except Exception as e:
-                print(f"❌ Error loading BM25 index for {doc_id}: {e}")
+                print(f"🔴-> Error loading BM25 index for {doc_id}: {e}")
                 # Fallback: empty index
                 self.bm25_indexes[doc_id] = BM25Okapi([[]])
                 self.document_chunks[doc_id] = {'chunks': [], 'chunk_ids': [], 'tokenized_chunks': []}
@@ -108,19 +108,19 @@ class SearchManager:
         if USE_TOTAL_BUDGET_APPROACH and len(queries) > 1:
             per_query_budget = max(1, top_k // len(queries))
             extra_budget = top_k % len(queries)  # Distribute remaining budget
-            print(f"🎯 Total Budget Approach: Distributing {top_k} candidates across {len(queries)} queries")
-            print(f"   📊 Base budget per query: {per_query_budget}")
+            print(f"🟢-> Total Budget Approach: Distributing {top_k} candidates across {len(queries)} queries")
+            print(f"Base budget per query: {per_query_budget}")
             if extra_budget > 0:
-                print(f"   ➕ Extra budget for first {extra_budget} queries: +1 each")
+                print(f"Extra budget for first {extra_budget} queries: +1 each")
         else:
             per_query_budget = top_k
             extra_budget = 0
-            print(f"🔍 Per-Query Approach: Each query gets {per_query_budget} candidates")
+            print(f"!!🟢-> Per-Query Approach: Each query gets {per_query_budget} candidates")
         
         all_candidates = {}  # point_id -> {'score': float, 'payload': dict, 'source': str}
         query_performance = {}  # Track performance of each sub-query
         
-        print(f"🔍 Running hybrid search with {len(queries)} focused queries...")
+        print(f"🟢-> Running hybrid search with {len(queries)} focused queries...")
         
         for query_idx, query in enumerate(queries):
             query_candidates = 0
@@ -179,7 +179,7 @@ class SearchManager:
                         semantic_count += 1
                 
                 except Exception as e:
-                    print(f"⚠️ Semantic search failed for query '{query[:50]}...': {e}")
+                    print(f"🔴-> Semantic search failed for query '{query[:50]}...': {e}")
             
             # 2. BM25 Search (if enabled)
             if ENABLE_HYBRID_SEARCH and doc_id in self.bm25_indexes:
@@ -224,7 +224,7 @@ class SearchManager:
                             bm25_count += 1
                 
                 except Exception as e:
-                    print(f"⚠️ BM25 search failed for query '{query[:50]}...': {e}")
+                    print(f"🔴-> BM25 search failed for query '{query[:50]}...': {e}")
             
             # Track query performance with budget info
             query_time = time.time() - query_start
@@ -259,7 +259,8 @@ class SearchManager:
         
         # Log performance summary
         approach_name = "Total Budget" if USE_TOTAL_BUDGET_APPROACH else "Per-Query"
-        print(f"🔍 Hybrid search completed ({approach_name} Approach):")
+        print("")
+        print(f"🟢-> Hybrid search completed ({approach_name} Approach):")
         print(f"   📊 {len(all_candidates)} total candidates from {len(queries)} focused queries")
         print(f"   🎯 Top {len(hybrid_results)} results selected")
         
@@ -273,7 +274,7 @@ class SearchManager:
                 total_budget_used += perf['candidates_found']
         
         if USE_TOTAL_BUDGET_APPROACH:
-            print(f"   💰 Total budget efficiency: {total_budget_used}/{top_k} candidates used")
+            print(f"   🟢-> Total budget efficiency: {total_budget_used}/{top_k} candidates used")
         
         return hybrid_results
     
@@ -331,4 +332,4 @@ class SearchManager:
         self.qdrant_clients.clear()
         self.bm25_indexes.clear()
         self.document_chunks.clear()
-        print("✅ Search Manager cleanup completed")
+        print("🟢-> Search Manager cleanup completed")
