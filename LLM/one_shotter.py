@@ -1,4 +1,4 @@
-# Main FastAPI-compatible QA function with enhanced debugging# FastAPI-Compatible Enhanced QA System
+# Main FastAPI-compatible QA function with enhanced debugging
 import re
 import time
 import asyncio
@@ -213,7 +213,7 @@ async def scrape_urls_fastapi(urls: List[str], max_chars: int = 3000) -> List[Di
     print(f"✅ Scraping complete: {successful}/{len(urls)} successful")
     return processed_results
 
-# Improved search function
+# search function
 async def search_web_async(query: str, num_results: int = 3) -> List[Dict[str, str]]:
     """Async web search using DuckDuckGo"""
     try:
@@ -297,7 +297,6 @@ Respond in this EXACT JSON format:
         ))
         
         # Parse JSON response
-        import json
         try:
             result_dict = json.loads(response.content)
             result = LinkRelevanceAssessment(**result_dict)
