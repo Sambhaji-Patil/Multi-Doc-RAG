@@ -1,5 +1,4 @@
 # RAG Configuration File
-# Update these settings as needed
 
 import os
 from dotenv import load_dotenv
@@ -26,18 +25,19 @@ RERANK_TOP_K =  9
 BM25_WEIGHT = 0.3 
 SEMANTIC_WEIGHT = 0.7
 
+MAX_CONTEXT_LENGTH = 4000*4
+
 # Advanced RAG Settings
 ENABLE_RERANKING = True
 ENABLE_HYBRID_SEARCH = True
 ENABLE_QUERY_EXPANSION = True
-RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+USE_TOTAL_BUDGET_APPROACH = True 
+
 QUERY_EXPANSION_COUNT = 3 
-SCORE_THRESHOLD = 0.3 
-MAX_CONTEXT_LENGTH = 4000*4
 
-USE_TOTAL_BUDGET_APPROACH = True  
-
+RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 EMBEDDING_MODEL ="BAAI/bge-large-en"  
+
 BATCH_SIZE = 8
 
 OUTPUT_DIR = os.getenv("RAG_EMBEDDINGS_PATH", "./RAG/rag_embeddings")
