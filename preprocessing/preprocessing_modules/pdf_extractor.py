@@ -1,7 +1,7 @@
 """
 Enhanced Text Extractor Module for FastAPI
 Handles extracting text content from PDF files with improved performance,
-table extraction, and proper CID font handling for scripts like Malayalam.
+table extraction, and proper CID font handling for scripts containing non English scripts.
 """
 import pdfplumber
 import pymupdf  # PyMuPDF (fitz)
@@ -446,11 +446,11 @@ class TextExtractor:
         return text_blocks
     
     def _process_line_with_proper_spacing(self, line_text: str) -> str:
-        """Process a line to ensure proper word spacing for Malayalam/complex scripts."""
+        """Process a line to ensure proper word spacing for complex scripts."""
         # Remove excessive spaces and newlines within the line
         line_text = re.sub(r'\s+', ' ', line_text.strip())
         
-        # For Malayalam and similar scripts, ensure proper word boundaries
+        # For non-english and similar scripts, ensure proper word boundaries
         # This is a basic implementation - you might need more sophisticated rules
         processed = ""
         words = line_text.split()
@@ -464,7 +464,7 @@ class TextExtractor:
             # Add the word
             processed += word
             
-            # Add space between words, but be careful with Malayalam conjuncts
+            # Add space between words, but be careful with non-english conjuncts
             if i < len(words) - 1:
                 next_word = words[i + 1].strip()
                 if next_word and not self._is_conjunct_continuation(word, next_word):
@@ -473,20 +473,20 @@ class TextExtractor:
         return processed
     
     def _is_conjunct_continuation(self, current_word: str, next_word: str) -> bool:
-        """Check if the next word is a continuation of a Malayalam conjunct."""
-        # Basic check for Malayalam conjuncts and joiners
+        """Check if the next word is a continuation of a non-english conjunct."""
+        # Basic check for non-english conjuncts and joiners
         if not current_word or not next_word:
             return False
             
-        # Check for Malayalam zero-width joiner or similar cases
-        malayalam_range = range(0x0D00, 0x0D80)
+        # Check for non-english zero-width joiner or similar cases
+        non_eng_range = range(0x0D00, 0x0D80)
         
-        # If both words contain Malayalam characters and current word ends with certain characters
-        current_has_malayalam = any(ord(c) in malayalam_range for c in current_word)
-        next_has_malayalam = any(ord(c) in malayalam_range for c in next_word)
+        # If both words contain non-english characters and current word ends with certain characters
+        current_has_non_eng = any(ord(c) in non_eng_range for c in current_word)
+        next_has_non_eng = any(ord(c) in non_eng_range for c in next_word)
         
-        if current_has_malayalam and next_has_malayalam:
-            # Check for specific Malayalam joining patterns
+        if current_has_non_eng and next_has_non_eng:
+            # Check for specific non-english joining patterns
             if current_word.endswith(('്', '്‍')) or next_word.startswith(('്', '്‍')):
                 return True
         

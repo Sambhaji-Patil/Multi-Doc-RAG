@@ -148,12 +148,10 @@ class ModularDocumentPreprocessor:
                     return [temp_file_path, 'image', True]  # Third element indicates no cleanup needed
                 
                 case 'jpeg':
-                    # Don't clean up image files - they'll be cleaned up by the caller
-                    return [temp_file_path, 'image', True]  # Third element indicates no cleanup needed
+                    return [temp_file_path, 'image', True]  
                 
                 case 'jpg':
-                    # Don't clean up image files - they'll be cleaned up by the caller
-                    return [temp_file_path, 'image', True]  # Third element indicates no cleanup needed
+                    return [temp_file_path, 'image', True]  
 
             # Validate extracted text
             if not self.text_extractor.validate_extracted_text(full_text):

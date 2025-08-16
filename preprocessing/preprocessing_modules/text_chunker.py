@@ -1,6 +1,5 @@
 """
 Text Chunker Module
-
 Handles chunking text into smaller pieces with overlap for better context preservation.
 """
 
@@ -59,10 +58,8 @@ class TextChunker:
     def _clean_text(self, text: str) -> str:
         """
         Clean text by normalizing whitespace and removing excessive line breaks.
-        
         Args:
             text: Raw text to clean
-            
         Returns:
             str: Cleaned text
         """
