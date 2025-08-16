@@ -110,7 +110,7 @@ class AdvancedRAGProcessor:
             except Exception:
                 return "I don't have information about this document. Please ensure the document has been processed.", timings
             
-            print(f"🚀 Advanced RAG processing for: {question[:100]}...")
+            print(f"\nAdvanced RAG processing for: {question[:100]}...")
             
             # Step 1: Query Expansion
             step_start = time.time()
@@ -133,10 +133,10 @@ class AdvancedRAGProcessor:
                 if logger and request_id:
                     logger.log_pipeline_stage(request_id, "query_expansion", expansion_time)
                 
-                print(f"   🔄 Query expansion completed using {expansion_provider}")
+                print(f"   🟢-> Query expansion completed using {expansion_provider}")
                 
             except Exception as e:
-                print(f"❌ Query expansion failed: {e}")
+                print(f"🔴-> Query expansion failed: {e}")
                 # Fallback to original query if expansion fails
                 expanded_queries = [question]
                 expansion_time = time.time() - step_start
@@ -174,10 +174,10 @@ class AdvancedRAGProcessor:
                 if logger and request_id:
                     logger.log_pipeline_stage(request_id, "reranking", rerank_time)
                 
-                print(f"   🎯 Reranking completed using {rerank_provider}")
+                print(f"   🟢-> Reranking completed using {rerank_provider}")
                 
             except Exception as e:
-                print(f"❌ Reranking failed, using original search results: {e}")
+                print(f"🔴-> Reranking failed, using original search results: {e}")
                 reranked_results = search_results
                 rerank_time = time.time() - step_start
                 timings['reranking'] = rerank_time
@@ -203,10 +203,10 @@ class AdvancedRAGProcessor:
                 if logger and request_id:
                     logger.log_pipeline_stage(request_id, "llm_generation", generation_time)
                 
-                print(f"💬 Answer generation completed using {generation_provider}-{instance}")
+                print(f"🟢-> Answer generation completed using {generation_provider}-{instance}")
                 
             except Exception as e:
-                print(f"❌ Answer generation failed: {e}")
+                print(f"🔴-> Answer generation failed: {e}")
                 answer = f"I encountered an error while generating the answer: {str(e)}"
                 generation_time = time.time() - step_start
                 timings['llm_generation'] = generation_time
@@ -229,7 +229,7 @@ class AdvancedRAGProcessor:
             error_time = time.time() - overall_start
             timings['error_time'] = error_time
             timings['providers_used'] = providers_used
-            print(f"❌ Error in advanced RAG processing: {str(e)}")
+            print(f"🔴-> Error in advanced RAG processing: {str(e)}")
             return f"I encountered an error while processing your question: {str(e)}", timings
     
     def get_provider_usage_stats(self) -> Dict:
@@ -257,7 +257,7 @@ class AdvancedRAGProcessor:
         # Cleanup search manager (which has the most resources)
         self.search_manager.cleanup()
         
-        print("✅ Advanced RAG cleanup completed")
+        print("🟢-> Advanced RAG cleanup completed")
     
     def get_system_info(self) -> Dict:
         """Get comprehensive information about the RAG system."""

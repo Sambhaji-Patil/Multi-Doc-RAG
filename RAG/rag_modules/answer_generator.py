@@ -14,7 +14,7 @@ class AnswerGenerator:
     def __init__(self):
         """Initialize the answer generator."""
         self.llm_handler = llm_handler
-        print("✅ Answer Generator initialized")
+        print("🟢-> Answer Generator initialized")
     
     async def generate_enhanced_answer(self, original_question: str, context: str, expanded_queries: List[str]) -> str:
         """Generate enhanced answer using the original question with retrieved context."""
@@ -93,5 +93,5 @@ Provide a comprehensive answer based on the document excerpts above:"""
             return answer.strip(), provider, instance
             
         except Exception as e:
-            print(f"❌ Error generating enhanced")
+            print(f"🔴-> Error generating enhanced")
             return "I encountered an error while generating the response.", "None" 

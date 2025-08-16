@@ -13,7 +13,7 @@ class ContextManager:
     
     def __init__(self):
         """Initialize the context manager."""
-        print("✅ Context Manager initialized")
+        print("🟢-> Context Manager initialized")
     
     def create_enhanced_context(self, question: str, results: List[Dict], max_length: int = MAX_CONTEXT_LENGTH) -> str:
         """Create enhanced context ensuring each query contributes equally."""
@@ -67,7 +67,7 @@ class ContextManager:
                     doc_text = f"[Query {q_idx+1} Doc {len(added_chunks)+1}]{relevance_info}\n{text}\n"
                     
                     if current_length + len(doc_text) > max_length:
-                        print(f"   ⚠️ Context length limit reached at {current_length} chars")
+                        print(f"   🔴-> Context length limit reached at {current_length} chars")
                         break
                     
                     context_parts.append(doc_text)
