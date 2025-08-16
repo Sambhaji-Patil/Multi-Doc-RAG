@@ -173,7 +173,7 @@ class ModularDocumentPreprocessor:
             
             # Log chunk statistics
             chunk_stats = self.text_chunker.get_chunk_stats(chunks)
-            print(f"📊 Chunk Statistics: {chunk_stats['total_chunks']} chunks, "
+            print(f"Chunk Statistics: {chunk_stats['total_chunks']} chunks, "
                   f"avg size: {chunk_stats['avg_chunk_size']:.0f} chars")
             
             # Step 4: Create embeddings

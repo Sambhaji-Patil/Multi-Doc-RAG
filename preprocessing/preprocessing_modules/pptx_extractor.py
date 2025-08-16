@@ -195,5 +195,3 @@ def extract_pptx(filepath: str) -> str:
         text_blocks.append("\n--- End of Slide ---\n")
     
     return "\n".join(text_blocks).strip()
-
-import json
