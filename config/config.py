@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Common LLM Settings
-MAX_TOKENS = 1200 
+MAX_TOKENS = 1200 #output tokens
 TEMPERATURE = 0.4
 
 OCR_SPACE_API_KEY = os.getenv("OCR_SPACE_API_KEY", "")
@@ -16,16 +16,18 @@ assert OCR_SPACE_API_KEY, "OCR_SPACE_API_KEY not set"
 BEARER_TOKEN = os.getenv("BEARER_TOKEN")
 
 # Chunking
-CHUNK_SIZE = 400 * 4
-CHUNK_OVERLAP = 100 * 4
+CHUNK_SIZE = 400 * 4 #1600
+CHUNK_OVERLAP = 100 * 4 #400
 
 TOP_K = 12
 SCORE_THRESHOLD = 0.3 
 RERANK_TOP_K =  9 
+
+#hybrid search (30-70 split)
 BM25_WEIGHT = 0.3 
 SEMANTIC_WEIGHT = 0.7
 
-MAX_CONTEXT_LENGTH = 4000*4
+MAX_CONTEXT_LENGTH = 4000*4 #input tokens to the LLM at a time
 
 # Advanced RAG Settings
 ENABLE_RERANKING = True
@@ -33,12 +35,12 @@ ENABLE_HYBRID_SEARCH = True
 ENABLE_QUERY_EXPANSION = True
 USE_TOTAL_BUDGET_APPROACH = True 
 
-QUERY_EXPANSION_COUNT = 3 
+QUERY_EXPANSION_COUNT = 3 #via LLM
 
 RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 EMBEDDING_MODEL ="BAAI/bge-large-en"  
 
-BATCH_SIZE = 8
+BATCH_SIZE = 8 #for embeddings generation
 
 OUTPUT_DIR = os.getenv("RAG_EMBEDDINGS_PATH", "./RAG/rag_embeddings")
 
