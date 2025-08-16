@@ -32,15 +32,40 @@ class AdvancedRAGProcessor:
         self.base_db_path = Path(OUTPUT_DIR)
         
         # Initialize all managers
-        print("🚀 Initializing Advanced RAG Processor (Modular v3.1)...")
+        print("Initializing Advanced RAG Processor (Modular v3.1)...")
         
         # Core components
-        self.embedding_manager = EmbeddingManager()
-        self.query_expansion_manager = QueryExpansionManager()
-        self.search_manager = SearchManager(self.embedding_manager)
-        self.reranking_manager = RerankingManager()
-        self.context_manager = ContextManager()
-        self.answer_generator = AnswerGenerator()
+        module_count = 0 #counter for the modules
+        try:
+            self.embedding_manager = EmbeddingManager()
+            module_count += 1
+        except:
+            print("🔴 Embedding Manager Failed")
+        try:
+            self.query_expansion_manager = QueryExpansionManager()
+            module_count += 1
+        except:
+            print("🔴 Query Expansion Manager Failed")
+        try:
+            self.search_manager = SearchManager(self.embedding_manager)
+            module_count += 1
+        except:
+            print("🔴 Search Manager Failed")
+        try:
+            self.reranking_manager = RerankingManager()
+            module_count += 1
+        except:
+            print("🔴 Reranking Manager Failed")
+        try:
+            self.context_manager = ContextManager()
+            module_count += 1
+        except:
+            print("🔴 Context Manager Failed")
+        try:
+            self.answer_generator = AnswerGenerator()
+            module_count += 1
+        except:
+            print("🔴 Answer Generator Failed")
         
         # Keep reference to LLM handler for info
         self.llm_handler = llm_handler
@@ -48,13 +73,8 @@ class AdvancedRAGProcessor:
         # Track LLM provider usage for monitoring
         self.provider_usage_stats = {}
         
-        print("📦 All modules loaded successfully:")
-        print("   🔄 Query Expansion Manager")
-        print("   🧠 Embedding Manager")
-        print("   🔍 Search Manager (Hybrid)")
-        print("   🎯 Reranking Manager")
-        print("   📝 Context Manager")
-        print("   💬 Answer Generator")
+        if module_count == 6 : print("📦 All modules loaded successfully:")
+        else : print(f"{6-module_count} modules have failed initialization!!")
     
     def _update_provider_stats(self, provider: str, stage: str):
         """Update provider usage statistics."""

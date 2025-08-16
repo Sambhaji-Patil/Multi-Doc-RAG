@@ -27,7 +27,7 @@ class SearchManager:
         self.qdrant_clients = {}
         self.bm25_indexes = {}  # Cache BM25 indexes per document
         self.document_chunks = {}  # Cache chunks for BM25
-        print("✅ Search Manager initialized")
+        print("🟢-> Search Manager initialized")
     
     def get_qdrant_client(self, doc_id: str) -> QdrantClient:
         """Get or create Qdrant client for a specific document."""

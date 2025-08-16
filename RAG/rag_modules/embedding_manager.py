@@ -21,7 +21,7 @@ class EmbeddingManager:
         """Initialize the embedding model."""
         print(f"🔄 Loading embedding model: {EMBEDDING_MODEL}")
         self.embedding_model = SentenceTransformer(EMBEDDING_MODEL , cache_folder=".cache")
-        print(f"✅ Embedding model loaded successfully")
+        print(f"🟢-> Embedding model loaded successfully")
     
     async def encode_query(self, query: str) -> List[float]:
         """Encode a query into embeddings."""
