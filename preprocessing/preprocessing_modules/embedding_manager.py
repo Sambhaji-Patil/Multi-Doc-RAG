@@ -2,6 +2,7 @@
 Embedding Manager Module
 
 Handles creation of embeddings for text chunks using sentence transformers.
+Uses shared model instance to reduce memory usage.
 """
 
 import asyncio
@@ -9,21 +10,21 @@ import numpy as np
 from typing import List
 from sentence_transformers import SentenceTransformer
 from config.config import EMBEDDING_MODEL, BATCH_SIZE
+from shared.model_manager import shared_model_manager
 
 
 class EmbeddingManager:
     """Handles embedding creation for text chunks."""
     
     def __init__(self):
-        """Initialize the embedding manager."""
+        """Initialize the embedding manager with shared model."""
         self.embedding_model = None
-        self._init_embedding_model()
+        print("🔗 Preprocessing Embedding Manager initialized (using shared model)")
     
-    def _init_embedding_model(self):
-        """Initialize the embedding model."""
-        print(f"🔄 Loading embedding model: {EMBEDDING_MODEL}")
-        self.embedding_model = SentenceTransformer(EMBEDDING_MODEL)
-        print(f"✅ Embedding model loaded successfully")
+    @property
+    def model(self) -> SentenceTransformer:
+        """Get the shared embedding model."""
+        return shared_model_manager.embedding_model
     
     async def create_embeddings(self, chunks: List[str]) -> np.ndarray:
         """
@@ -42,7 +43,7 @@ class EmbeddingManager:
         
         def create_embeddings_sync():
             """Synchronous embedding creation to run in thread pool."""
-            embeddings = self.embedding_model.encode(
+            embeddings = self.model.encode(
                 chunks,
                 batch_size=BATCH_SIZE,
                 show_progress_bar=True,
@@ -54,7 +55,7 @@ class EmbeddingManager:
         loop = asyncio.get_event_loop()
         embeddings = await loop.run_in_executor(None, create_embeddings_sync)
         
-        print(f"✅ Created embeddings with shape: {embeddings.shape}")
+        print(f"🟢-> Created embeddings with shape: {embeddings.shape}")
         return embeddings
     
     def get_embedding_dimension(self) -> int:
@@ -64,11 +65,7 @@ class EmbeddingManager:
         Returns:
             int: Embedding dimension
         """
-        if self.embedding_model is None:
-            raise RuntimeError("Embedding model not initialized")
-        
-        # Get dimension from model
-        return self.embedding_model.get_sentence_embedding_dimension()
+        return shared_model_manager.get_embedding_dimension()
     
     def validate_embeddings(self, embeddings: np.ndarray, expected_count: int) -> bool:
         """
@@ -97,7 +94,7 @@ class EmbeddingManager:
             print("❌ Embeddings contain NaN or infinite values")
             return False
         
-        print(f"✅ Embeddings validation passed: {embeddings.shape}")
+        print(f"🟢-> Embeddings validation passed: {embeddings.shape}")
         return True
     
     def get_model_info(self) -> dict:
@@ -107,12 +104,9 @@ class EmbeddingManager:
         Returns:
             dict: Model information
         """
-        if self.embedding_model is None:
-            return {"model_name": EMBEDDING_MODEL, "status": "not_loaded"}
-        
         return {
             "model_name": EMBEDDING_MODEL,
-            "embedding_dimension": self.get_embedding_dimension(),
-            "max_sequence_length": getattr(self.embedding_model, 'max_seq_length', 'unknown'),
-            "status": "loaded"
+            "embedding_dimension": shared_model_manager.get_embedding_dimension(),
+            "max_sequence_length": getattr(shared_model_manager.embedding_model, 'max_seq_length', 'unknown'),
+            "status": "loaded_shared"
         }
