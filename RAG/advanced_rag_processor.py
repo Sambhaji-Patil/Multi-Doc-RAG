@@ -34,47 +34,77 @@ class AdvancedRAGProcessor:
         # Initialize all managers
         print("Initializing Advanced RAG Processor (Modular v3.1)...")
         
-        # Core components
-        module_count = 0 #counter for the modules
+        # Core components initialization
+        from typing import Optional
+
+        # Initialize counters and references
+        module_count = 0
+        total_modules = 6
+
+        # --- Embedding Manager ---
         try:
-            self.embedding_manager = EmbeddingManager()
+            self.embedding_manager: Optional[EmbeddingManager] = EmbeddingManager()
             module_count += 1
-        except:
-            print("🔴 Embedding Manager Failed")
+        except Exception as e:
+            self.embedding_manager = None
+            print(f"🔴 Embedding Manager Failed: {e}")
+
+        # --- Query Expansion Manager ---
         try:
-            self.query_expansion_manager = QueryExpansionManager()
+            self.query_expansion_manager: Optional[QueryExpansionManager] = QueryExpansionManager()
             module_count += 1
-        except:
-            print("🔴 Query Expansion Manager Failed")
+        except Exception as e:
+            self.query_expansion_manager = None
+            print(f"🔴 Query Expansion Manager Failed: {e}")
+
+        # --- Search Manager (depends on Embedding Manager) ---
         try:
-            self.search_manager = SearchManager(self.embedding_manager)
-            module_count += 1
-        except:
-            print("🔴 Search Manager Failed")
+            if self.embedding_manager:
+                self.search_manager: Optional[SearchManager] = SearchManager(self.embedding_manager)
+                module_count += 1
+            else:
+                self.search_manager = None
+                print("🔴 Search Manager Skipped: Embedding Manager not available")
+        except Exception as e:
+            self.search_manager = None
+            print(f"🔴 Search Manager Failed: {e}")
+
+        # --- Reranking Manager ---
         try:
-            self.reranking_manager = RerankingManager()
+            self.reranking_manager: Optional[RerankingManager] = RerankingManager()
             module_count += 1
-        except:
-            print("🔴 Reranking Manager Failed")
+        except Exception as e:
+            self.reranking_manager = None
+            print(f"🔴 Reranking Manager Failed: {e}")
+
+        # --- Context Manager ---
         try:
-            self.context_manager = ContextManager()
+            self.context_manager: Optional[ContextManager] = ContextManager()
             module_count += 1
-        except:
-            print("🔴 Context Manager Failed")
+        except Exception as e:
+            self.context_manager = None
+            print(f"🔴 Context Manager Failed: {e}")
+
+        # --- Answer Generator ---
         try:
-            self.answer_generator = AnswerGenerator()
+            self.answer_generator: Optional[AnswerGenerator] = AnswerGenerator()
             module_count += 1
-        except:
-            print("🔴 Answer Generator Failed")
-        
+        except Exception as e:
+            self.answer_generator = None
+            print(f"🔴 Answer Generator Failed: {e}")
+
         # Keep reference to LLM handler for info
-        self.llm_handler = llm_handler
-        
+        self.llm_handler = llm_handler if "llm_handler" in locals() else None
+
         # Track LLM provider usage for monitoring
         self.provider_usage_stats = {}
-        
-        if module_count == 6 : print("📦 All modules loaded successfully:")
-        else : print(f"{6-module_count} modules have failed initialization!!")
+
+        # Summary message
+        if module_count == total_modules:
+            print("📦 All modules loaded successfully")
+        else:
+            print(f"⚠️ {total_modules - module_count} modules failed or were skipped during initialization!")
+
     
     def _update_provider_stats(self, provider: str, stage: str):
         """Update provider usage statistics."""
