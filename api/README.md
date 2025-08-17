@@ -163,7 +163,7 @@ TIMEOUT_SECONDS = 600        # Request timeout for large documents
 MAX_RETRIES = 3             # Automatic retry attempts
 
 # Authentication
-ADMIN_TOKEN = "9420689497"   # Default admin token (change in production)
+ADMIN_TOKEN = "your_admin_token"   # Default admin token (change in production)
 BEARER_TOKEN = "your_token"  # Main API bearer token
 ```
 
