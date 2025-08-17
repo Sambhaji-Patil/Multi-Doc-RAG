@@ -34,6 +34,7 @@ COPY api/ ./api/
 COPY config/ ./config/
 COPY LLM/ ./LLM/
 COPY RAG/ ./RAG/
+COPY shared/ ./shared/
 COPY logger/ ./logger/
 COPY preprocessing/ ./preprocessing/
 
