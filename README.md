@@ -88,6 +88,9 @@ shastradocs-v2/
 │       ├── reranking_manager.py    # Cross-encoder reranking
 │       ├── context_manager.py      # Context assembly
 │       └── answer_generator.py     # LLM answer generation
+├── 📁 shared/                         # Advanced retrieval system
+│   ├── __init__.py
+│   └── model_manager.py             # Ensures one embedding model instance is created
 ├── 📁 preprocessing/               # Document processing pipeline
 │   ├── __init__.py
 │   ├── preprocessing.py            # Main entry point and CLI
@@ -406,7 +409,7 @@ ENABLE_RERANKING=true
 
 The system automatically selects optimal processing modes:
 
-**1. Standard RAG Processing**
+**1. Advanced RAG Processing**
 - Complex documents requiring full pipeline
 - Vector database storage and hybrid search
 - Best for policy documents, manuals
@@ -429,8 +432,8 @@ The system automatically selects optimal processing modes:
 ## 📊 Performance Metrics
 
 ### Processing Speed
-- **Simple Queries**: 0.5-1.5 seconds
-- **Complex Multi-aspect**: 1.5-3.0 seconds
+- **Simple Queries**: 1-2 seconds
+- **Complex Multi-aspect**: 2-4 seconds
 - **Document Preprocessing**: 2-5 pages/second (PDF)
 - **Embedding Generation**: 100-500 chunks/second
 
@@ -442,7 +445,6 @@ The system automatically selects optimal processing modes:
 
 ### Resource Usage
 - **Memory**: 500MB-1GB (model dependent)
-- **Storage**: Vector databases (~100MB per 1000 documents)
 - **CPU**: Moderate during processing, minimal idle
 
 ## 🛠️ Troubleshooting

@@ -14,6 +14,7 @@ OCR_SPACE_API_KEY = os.getenv("OCR_SPACE_API_KEY", "")
 assert OCR_SPACE_API_KEY, "OCR_SPACE_API_KEY not set"
 
 BEARER_TOKEN = os.getenv("BEARER_TOKEN")
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN")
 
 # Chunking
 CHUNK_SIZE = 400 * 4 #1600

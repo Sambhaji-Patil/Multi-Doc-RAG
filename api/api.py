@@ -36,7 +36,7 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
 
 def verify_admin_token(credentials: HTTPAuthorizationCredentials = Depends(admin_security)):
     """Verify the bearer token for admin endpoints."""
-    if credentials.credentials != "9420689497":
+    if credentials.credentials != ADMIN_TOKEN:
         raise HTTPException(
             status_code=401,
             detail="Invalid admin authentication token"
