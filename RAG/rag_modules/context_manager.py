@@ -15,7 +15,7 @@ class ContextManager:
         """Initialize the context manager."""
         print("🟢-> Context Manager initialized")
     
-    def create_enhanced_context(self, question: str, results: List[Dict], max_length: int = MAX_CONTEXT_LENGTH, extra_chunks=[]) -> str:
+    def create_enhanced_context(self, question: str, results: List[Dict], max_length: int = MAX_CONTEXT_LENGTH, extra_chunks: List[str] = []) -> str:
         """Create enhanced context ensuring each query contributes equally."""
         # Group results by expanded query index
         query_to_chunks = defaultdict(list)
@@ -33,47 +33,55 @@ class ContextManager:
         for q_idx in query_to_chunks:
             query_to_chunks[q_idx].sort(key=lambda x: x[1].get('rerank_score', x[1].get('final_score', x[1].get('score', 0))), reverse=True)
 
-        # Calculate chunks per query (should be 3 for each query with total budget = 9 and 3 queries)
         num_queries = len(query_to_chunks)
-        if num_queries == 0:
-            return ""
+        if num_queries == 0 and not extra_chunks:
+             return ""
         
-        # Ensure each query contributes equally (round-robin with guaranteed slots)
         context_parts = []
         current_length = 0
         added_chunks = set()
         
-        # Calculate how many chunks each query should contribute
-        chunks_per_query = len(results) // num_queries if num_queries > 0 else len(results)
-        extra_chunks = len(results) % num_queries
+        chunks_per_query = len(results) // num_queries if num_queries > 0 else 0
+        num_extra_chunks = len(results) % num_queries if num_queries > 0 else 0
         
-        print(f"📊 Context Creation: {num_queries} queries, {chunks_per_query} chunks per query (+{extra_chunks} extra)")
+        print(f"📊 Context Creation: {num_queries} queries, {chunks_per_query} chunks per query (+{num_extra_chunks} extra)")
+        try:
+            for q_idx in sorted(query_to_chunks.keys()):
+                query_chunk_limit = chunks_per_query + (1 if q_idx < num_extra_chunks else 0)
+                query_chunks_added = 0
+                
+                print(f"   Query {q_idx+1}: Adding up to {query_chunk_limit} chunks")
+                
+                for i, result in query_to_chunks[q_idx]:
+                    if i not in added_chunks and query_chunks_added < query_chunk_limit:
+                        text = result['payload'].get('text', '')
+                        doc_id = result['payload'].get('doc_id', '')
+                        doc_text = f"\n---\ndoc_id: {doc_id}\ncontent: {text}\n"
+                        
+                        if current_length + len(doc_text) > max_length:
+                            print(f"   🔴-> Context length limit reached at {current_length} chars")
+                            break 
+                        context_parts.append(doc_text)
+                        current_length += len(doc_text)
+                        added_chunks.add(i)
+                        query_chunks_added += 1
+                
+                
+                print(f"   Query {q_idx+1}: Added {query_chunks_added} chunks")
         
-        for q_idx in sorted(query_to_chunks.keys()):
-            # Determine how many chunks this query should contribute
-            query_chunk_limit = chunks_per_query + (1 if q_idx < extra_chunks else 0)
-            query_chunks_added = 0
-            
-            print(f"   Query {q_idx+1}: Adding up to {query_chunk_limit} chunks")
-            
-            for i, result in query_to_chunks[q_idx]:
-                if i not in added_chunks and query_chunks_added < query_chunk_limit:
-                    text = result['payload'].get('text', '')
-                    doc_id = result['payload'].get('doc_id', '')
-                    doc_text = f"\n---\ndoc_id: {doc_id}\ncontent: {text}\n"
-                    
-                    if current_length + len(doc_text) > max_length:
-                        print(f"   🔴-> Context length limit reached at {current_length} chars")
-                        break 
-                    context_parts.append(doc_text)
-                    current_length += len(doc_text)
-                    added_chunks.add(i)
-                    query_chunks_added += 1
-
+        except Exception as e:
+            print(e)
+            raise
+        
+        if extra_chunks:
+            print(f"   ➕ Adding {len(extra_chunks)} manually provided extra chunks.")
             for chunk in extra_chunks:
-                context_parts.append(f"---\n{chunk}\n")
-            
-            print(f"   Query {q_idx+1}: Added {query_chunks_added} chunks")
-        
+                extra_doc_text = f"\n---\ncontent: {chunk}\n"
+                if current_length + len(extra_doc_text) > max_length:
+                    print(f"   🔴-> Context length limit reached while adding extra chunks.")
+                    break
+                context_parts.append(extra_doc_text)
+                current_length += len(extra_doc_text)
+
         print(f"📝 Final context: {len(added_chunks)} chunks, {current_length} chars")
         return "\n".join(context_parts)

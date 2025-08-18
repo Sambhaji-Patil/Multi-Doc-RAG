@@ -205,7 +205,7 @@ class ModularDocumentPreprocessor:
             if not self.embedding_manager.validate_embeddings(embeddings, len(chunks)):
                 raise ValueError("Invalid embeddings generated")
             
-            await self.vector_storage.store_in_qdrant(chunks, embeddings, doc_id)
+            await self.vector_storage.store(chunks, embeddings, doc_id)
             
             # Step 5: Save metadata
             self.metadata_manager.save_document_metadata(chunks, doc_id, document_url)

@@ -195,6 +195,7 @@ class AdvancedRAGProcessor:
                     logger.log_pipeline_stage(request_id, "reranking", rerank_time)
                 
                 print(f"   🟢-> Reranking completed using {rerank_provider}")
+
                 
             except Exception as e:
                 print(f"🔴-> Reranking failed, using original search results: {e}")
@@ -209,7 +210,7 @@ class AdvancedRAGProcessor:
             timings['context_creation'] = context_time
             if logger and request_id:
                 logger.log_pipeline_stage(request_id, "context_creation", context_time)
-
+            print("Context Creted")
             # Step 5: Enhanced Answer Generation
             step_start = time.time()
             try:
