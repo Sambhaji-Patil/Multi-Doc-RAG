@@ -9,3 +9,5 @@ cross-encoder/ms-marco-MiniLM-L-6-v2
 test
 RAG/rag_embeddings/[a-z]*
 .cache/
+docs
+examples
