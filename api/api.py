@@ -47,7 +47,7 @@ def verify_admin_token(credentials: HTTPAuthorizationCredentials = Depends(admin
 
 # Pydantic models for request/response
 class ProcessDocumentRequest(BaseModel):
-    documents: Union[HttpUrl, List[HttpUrl]]
+    documents: Union[str, List[str]]
     questions: List[str]
 
 class DocumentQuestionPair(BaseModel):

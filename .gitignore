@@ -10,3 +10,5 @@ test
 RAG/rag_embeddings/[a-z]*
 .cache/
 *test*
+docs
+examples
