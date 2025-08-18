@@ -56,7 +56,7 @@ class ContextManager:
                     if i not in added_chunks and query_chunks_added < query_chunk_limit:
                         text = result['payload'].get('text', '')
                         doc_id = result['payload'].get('doc_id', '')
-                        doc_text = f"\n---\ndoc_id: {doc_id}\ncontent: {text}\n"
+                        doc_text = f"\n---\n{text}\n"
                         
                         if current_length + len(doc_text) > max_length:
                             print(f"   🔴-> Context length limit reached at {current_length} chars")

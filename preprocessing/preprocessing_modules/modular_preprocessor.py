@@ -150,7 +150,7 @@ class ModularDocumentPreprocessor:
                 # --- Handle Special Types ---
                 case 'url':
                     content = "URL for Context: " + temp_file_path
-                    self.special_content_cache[doc_id] = content
+                    self.special_content_cache[doc_id] = [content]
                     self.metadata_manager.save_document_metadata([content], doc_id, document_url)
                     return doc_id, "oneshot"
                 
@@ -175,24 +175,15 @@ class ModularDocumentPreprocessor:
 
             # --- Continue with normal text processing ---
             # Step 3: Create chunks
-            import json
-            with open(f"test/extracted/{temp_file_path.split('\\')[-1]}.json", 'w', encoding='utf-8') as f:
-                if isinstance(full_text, str):
-                    f.write(full_text)
-                else:
-                    json.dump(full_text, f)
-
             chunks = self.text_chunker.chunk_text(full_text, doc_id=doc_id)
 
             
-            with open(f"test/chunks/{temp_file_path.split('\\')[-1]}.json", 'w', encoding='utf-8') as f:
-                json.dump(chunks, f)
-            
             # Handle short documents as a special 'oneshot' type
-            if (not skip_length_check) and len(chunks) < 5:
+            if (not skip_length_check) and len(chunks) < 6:
                 print(f"Only {len(chunks)} chunks formed, treating as 'oneshot'.")
-                self.special_content_cache[doc_id] = full_text
                 self.metadata_manager.save_document_metadata(chunks, doc_id, document_url)
+                
+                self.special_content_cache[doc_id] = chunks
                 return doc_id, "oneshot"
             
             if not chunks:

@@ -236,7 +236,7 @@ async def process_document(
                         context = "\n---\n".join([f"doc id: {doc_id}, page number: {d['page_num']}\n{d['content']}" for d in doc_info.content])
                         final_answers = get_answer_for_tabluar(doc_info.content, questions)
                     elif doc_info.status == "oneshot":
-                        context = "\n---\n".join([f"doc id: {doc_id}, page number: {d['page_num']}\n{d['content']}" for d in doc_info.content])
+                        context = "\n---\n".join(doc_info.content)
                         tasks = [get_oneshot_answer(context, questions[i:i + 3]) for i in range(0, len(questions), 3)]
                         results = await asyncio.gather(*tasks)
                         final_answers = [ans for batch in results for ans in batch]
@@ -244,6 +244,8 @@ async def process_document(
                     return ProcessDocumentResponse(
                         answers=final_answers
                     )
+                except Exception as e:
+                    raise e.with_traceback
                 finally:
                     if doc_info.status == "image" and doc_info.content and os.path.exists(doc_info.content):
                         os.unlink(doc_info.content)
@@ -270,6 +272,10 @@ async def process_document(
                             if doc_info.status == "image":
                                 special_chunks_for_rag.append(extract_data_from_image(doc_info.content))
                                 if os.path.exists(doc_info.content): os.unlink(doc_info.content)
+                            elif doc_info.status == "oneshot":
+                                special_chunks_for_rag.extend(extract_data_from_image(doc_info.content))
+                            elif doc_info.status == "tabular":
+                                special_chunks_for_rag.extend([f"doc id: {doc_id}, page number: {d['page_num']}\n{d['content']}" for d in doc_info.content])
                             else:
                                 special_chunks_for_rag.append(str(doc_info.content))
                         except Exception as e:
@@ -318,110 +324,6 @@ async def process_document(
         print(f"📊 Request logged with ID: {request_id} (Time: {processing_time:.2f}s)")
     
     return ProcessDocumentResponse(answers=final_answers)
-
-@app.post("/hackrx/run-multiple", response_model=ProcessMultipleDocumentsResponse)
-async def process_multiple_documents(
-    request: ProcessMultipleDocumentsRequest, 
-    token: str = Depends(verify_token)
-):
-    global rag_processor, document_preprocessor
-    if not rag_processor or not document_preprocessor:
-        raise HTTPException(status_code=503, detail="RAG system not initialized")
-    
-    start_time = time.time()
-    request_id = rag_logger.generate_request_id()
-    rag_logger.start_request_timing(request_id)
-    print(f"[{request_id}] Processing {len(request.document_question_pairs)} documents with individual question sets...")
-
-    async def process_single_document_qa(doc_pair: DocumentQuestionPair, index: int) -> DocumentAnswerResult:
-        doc_start_time = time.time()
-        document_url = str(doc_pair.document_url)
-        questions = doc_pair.questions
-        doc_id = document_preprocessor.generate_doc_id(document_url)
-
-        try:
-            print(f"[{request_id}] Doc {index+1}: {document_url} ({len(questions)} questions)")
-            
-            # ## MODIFIED: Call preprocessor and unpack tuple
-            processed_doc_id, doc_type = await document_preprocessor.process_document(document_url)
-
-            if doc_type == "error":
-                raise ValueError(f"Failed to process document {document_url}")
-
-            answers = []
-            # ## MODIFIED: Handle special types by fetching content and calling dedicated answerers
-            if doc_type in ["image", "tabular", "oneshot"]:
-                content = document_preprocessor.get_special_document_details(processed_doc_id)
-                try:
-                    if doc_type == "image":
-                        answers = get_answer_for_image(content, questions)
-                    elif doc_type == "tabular":
-                        answers = get_answer_for_tabluar(content, questions)
-                    elif doc_type == "oneshot":
-                        answers = await get_oneshot_answer(content, questions)
-                finally:
-                    if doc_type == "image" and os.path.exists(content):
-                        os.unlink(content)
-            
-            # ## MODIFIED: Handle "normal" RAG-based documents
-            elif doc_type == "normal":
-                async def answer_single_question(question: str, q_index: int):
-                    answer, _ = await rag_processor.answer_question(question=question, doc_id=processed_doc_id, logger=rag_logger, request_id=f"{request_id}_doc{index+1}_q{q_index+1}")
-                    return answer
-                
-                semaphore = asyncio.Semaphore(3)
-                async def bounded_answer(question: str, q_index: int):
-                    async with semaphore: return await answer_single_question(question, q_index)
-                
-                tasks = [bounded_answer(q, i) for i, q in enumerate(questions)]
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-                answers = [f"Error: {str(r)}" if isinstance(r, Exception) else r for r in results]
-
-            processing_time = time.time() - doc_start_time
-            print(f"[{request_id}] ✅ Doc {index+1} completed in {processing_time:.2f}s")
-            
-            return DocumentAnswerResult(
-                document_url=document_url, doc_id=processed_doc_id, answers=answers, 
-                processing_time=processing_time, status="success"
-            )
-            
-        except Exception as e:
-            processing_time = time.time() - doc_start_time
-            error_msg = str(e)
-            print(f"[{request_id}] ❌ Doc {index+1} failed: {error_msg}")
-            return DocumentAnswerResult(
-                document_url=document_url, doc_id=doc_id, answers=[f"Failed to process document: {error_msg}"],
-                processing_time=processing_time, status="error", error_message=error_msg
-            )
-
-    doc_semaphore = asyncio.Semaphore(2)
-    async def bounded_doc_process(doc_pair: DocumentQuestionPair, index: int):
-        async with doc_semaphore: return await process_single_document_qa(doc_pair, index)
-    
-    tasks = [bounded_doc_process(pair, i) for i, pair in enumerate(request.document_question_pairs)]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    
-    final_results = []
-    for i, res in enumerate(results):
-        if isinstance(res, Exception):
-            final_results.append(DocumentAnswerResult(
-                document_url=str(request.document_question_pairs[i].document_url), doc_id="error",
-                answers=[f"Document processing exception: {str(res)}"], processing_time=0.0,
-                status="error", error_message=str(res)
-            ))
-        else:
-            final_results.append(res)
-    
-    total_time = time.time() - start_time
-    successful = sum(1 for r in final_results if r.status == "success")
-    failed = len(final_results) - successful
-    
-    print(f"[{request_id}] 🟢-> Multiple document processing completed in {total_time:.2f}s. Successful: {successful}, Failed: {failed}")
-    
-    return ProcessMultipleDocumentsResponse(
-        results=final_results, total_processing_time=total_time,
-        successful_documents=successful, failed_documents=failed
-    )
 
 @app.post("/preprocess", response_model=PreprocessingResponse)
 async def preprocess_document(document_url: str, force: bool = False, token: str = Depends(verify_admin_token)):

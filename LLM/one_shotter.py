@@ -419,6 +419,8 @@ CRITICAL INSTRUCTIONS:
 8. If your answer is based on context, then mention the exact part referenced.
 9. If the context is of different than actual language, then reference should in contexts's language itself followed by its meaning in users queries language.             
 10. Think thoroughly before answering.
+11. If you are using any reference from Orginal Context mention them in curly brackets in this format:
+            {doc_id : document id, page_num : page number, reference : exact sentence or pragraph as in context}
              
 The context may contain multiple sections:
 - Original context
@@ -430,7 +432,7 @@ USE ALL OF THESE SECTIONS TO PROVIDE COMPLETE ANSWERS.
 Respond in this EXACT JSON format:
 {{
     "answers": [
-        "<Correct Answer to the question 1>",
+        "<Correct Answer to the question 1{doc_id: "doc_fcebebab243d", page_num: "2", reference: "reference string"} answer continued>",
         "<Correct Answer to the question 2 only if question 2 exists.>",
         ...
     ]
@@ -676,8 +678,6 @@ async def get_oneshot_answer(context: str, questions: List[str]) -> List[str]:
         print("⚠️  No additional content to integrate")
         final_context = context
     
-
-    print("Final Context: ", final_context)
     answers = generate_answers_enhanced(final_context, questions)
     
     total_time = time.time() - start_time

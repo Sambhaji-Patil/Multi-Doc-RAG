@@ -4,7 +4,6 @@ pydantic
 aiohttp
 pdfplumber
 sentence-transformers
-qdrant-client
 openai
 google-generativeai
 numpy
@@ -15,6 +14,10 @@ python-dotenv
 rank-bm25
 transformers
 torch
+
+lancedb
+pandas
+pyarrow
 
 openpyxl
 python-docx
