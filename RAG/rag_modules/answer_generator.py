@@ -112,4 +112,4 @@ Provide a comprehensive answer based on the document excerpts above:"""
             
         except Exception as e:
             print(f"🔴-> Error generating enhanced")
-            return "I encountered an error while generating the response.", "None" 
+            return "I encountered an error while generating the response.", "None", "None" 

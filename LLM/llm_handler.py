@@ -231,8 +231,15 @@ class UnifiedLLMHandler:
             Dictionary with 'text', 'provider', 'instance', and 'model' keys
         """
         
-        with open(f"test/context/{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", 'w') as f:
-            f.write(user_prompt)
+        # Optional debug logging - create directory if it doesn't exist
+        try:
+            import os
+            os.makedirs("test/context", exist_ok=True)
+            with open(f"test/context/{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", 'w') as f:
+                f.write(user_prompt)
+        except Exception as e:
+            # Silently continue if debug logging fails
+            pass
 
         temp = temperature if temperature is not None else TEMPERATURE
         max_tok = max_tokens if max_tokens is not None else MAX_TOKENS

@@ -186,7 +186,7 @@ async def process_document(
                 content = None
                 if doc_type in ["image", "tabular", "oneshot"]:
                     content = document_preprocessor.get_special_document_details(processed_doc_id)
-                
+                print(f"DOC_INFO_DATA: {doc_info_data}")
                 print(f"[{request_id}] ✅ Doc {index+1}: Processed as '{doc_type}' ({doc_info_data.get('chunk_count', 0)} chunks)")
                 return processed_doc_id, DocumentInfo(
                     document_url=doc_url,
