@@ -2,6 +2,7 @@
 Enhanced Text Extractor Module for FastAPI
 Handles extracting text content from PDF files with improved performance,
 table extraction, and proper CID font handling for scripts containing non English scripts.
+Returns data structured by page number.
 """
 import pdfplumber
 import pymupdf  # PyMuPDF (fitz)
@@ -30,9 +31,9 @@ class TextExtractor:
         self.cache = {}
         
     def extract_text_from_pdf(self, pdf_path: str, extract_tables: bool = True, 
-                             handle_cid: bool = True) -> str:
+                             handle_cid: bool = True) -> List[Dict[str, Union[int, str]]]:
         """
-        Extract text from PDF file with tables in correct order.
+        Extract text from each page of a PDF file.
        
         Args:
             pdf_path: Path to the PDF file
@@ -40,7 +41,9 @@ class TextExtractor:
             handle_cid: Whether to handle CID font mapping issues
            
         Returns:
-            str: Complete text content with tables in correct order
+            List[Dict]: A list of dictionaries, where each dictionary
+                        represents a page and contains 'page_num' and 'content'.
+                        Example: [{'page_num': 1, 'content': '...'}, ...]
            
         Raises:
             Exception: If text extraction fails
@@ -49,6 +52,7 @@ class TextExtractor:
         if cached_data:
             print("Using Cache: Skipped pdf extraction")
             return cached_data
+        
         pdf_path = Path(pdf_path)
         if not pdf_path.exists():
             raise FileNotFoundError(f"PDF file not found: {pdf_path}")
@@ -57,11 +61,12 @@ class TextExtractor:
         
         # Choose extraction method based on backend
         if self.backend == "pymupdf" or (self.backend == "auto" and handle_cid):
-            text = self._extract_with_pymupdf(pdf_path, extract_tables, handle_cid)
+            pages_data = self._extract_with_pymupdf(pdf_path, extract_tables, handle_cid)
         else:
-            text =  self._extract_with_pdfplumber(pdf_path, extract_tables)
-        self.cache[pdf_path] = text
-        return text
+            pages_data = self._extract_with_pdfplumber(pdf_path, extract_tables)
+            
+        self.cache[pdf_path] = pages_data
+        return pages_data
     
     def _fallback_text_extraction(self, page: pymupdf.Page) -> List[Dict]:
         """Fallback text extraction for problematic pages."""
@@ -227,38 +232,32 @@ class TextExtractor:
             return result
         
         return extract_page_content_safe
+
     def _extract_with_pymupdf(self, pdf_path: Path, extract_tables: bool, 
-                             handle_cid: bool) -> str:
-        """Extract using PyMuPDF with comprehensive error handling."""
+                             handle_cid: bool) -> List[Dict[str, Union[int, str]]]:
+        """Extract using PyMuPDF, returning content per page."""
         
-        # Get the safe extraction function
         extract_page_content_safe = self._extract_with_pymupdf_safe(pdf_path, extract_tables, handle_cid)
         
         try:
             doc = pymupdf.open(pdf_path)
             
-            # Validate document
             if not doc or doc.page_count == 0:
                 raise Exception("Invalid or empty PDF document")
             
-            self.logger.info(f"Processing {doc.page_count} pages")
+            self.logger.info(f"Processing {doc.page_count} pages with PyMuPDF")
             
-            # Process pages in parallel with error handling
             page_results = []
             try:
                 with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                    # Prepare page data with error handling
                     page_data = []
                     for i in range(doc.page_count):
                         try:
-                            page = doc[i]
-                            page_data.append((i, page))
+                            page_data.append((i, doc[i]))
                         except Exception as page_error:
                             self.logger.error(f"Failed to access page {i+1}: {page_error}")
-                            # Create dummy page data for error handling
                             page_data.append((i, None))
                     
-                    # Process pages
                     if page_data:
                         page_results = list(executor.map(extract_page_content_safe, page_data))
                     else:
@@ -266,44 +265,37 @@ class TextExtractor:
             
             except Exception as parallel_error:
                 self.logger.warning(f"Parallel processing failed, trying sequential: {parallel_error}")
-                # Fallback to sequential processing
                 for i in range(doc.page_count):
                     try:
-                        page = doc[i]
-                        result = extract_page_content_safe((i, page))
+                        result = extract_page_content_safe((i, doc[i]))
                         page_results.append(result)
                     except Exception as seq_error:
                         self.logger.error(f"Sequential processing failed for page {i+1}: {seq_error}")
                         page_results.append({
                             'page_num': i + 1,
-                            'content_blocks': [{
-                                'type': 'text',
-                                'content': f"[Error: Could not process page {i+1}]",
-                                'bbox': (0, 0, 0, 0)
-                            }]
+                            'content_blocks': [{'type': 'text', 'content': f"[Error: Could not process page {i+1}]"}]
                         })
-            
-            # Compile final text with proper order
-            full_text = ""
+
+            final_pages = []
             successful_pages = 0
-            
+            total_chars = 0
+
+            # Sort results by page number to ensure correct order
+            page_results.sort(key=lambda p: p.get('page_num', 0))
+
             for result in page_results:
                 if not result or 'content_blocks' not in result:
                     continue
-                    
-                page_content = f"\n--- Page {result['page_num']} ---\n"
+                
+                page_content = ""
                 page_has_content = False
                 
-                # Add content blocks in order
                 for block in result['content_blocks']:
-                    if not block or 'content' not in block:
-                        continue
-                        
-                    content = block['content']
-                    if not content or not content.strip():
+                    content = block.get('content', '').strip()
+                    if not content:
                         continue
                     
-                    if block.get('type') == 'text' and content.strip():
+                    if block.get('type') == 'text':
                         if not content.startswith('[Error') and not content.startswith('[No content') and not content.startswith('[Unable'):
                             page_has_content = True
                         page_content += content + "\n"
@@ -314,123 +306,76 @@ class TextExtractor:
                 if page_has_content:
                     successful_pages += 1
                 
-                full_text += page_content
+                cleaned_content = self._clean_final_text(page_content)
+                total_chars += len(cleaned_content)
+                
+                final_pages.append({
+                    'page_num': result['page_num'],
+                    'content': cleaned_content
+                })
             
             doc.close()
             
-            # Final cleanup
-            full_text = self._clean_final_text(full_text)
+            self.logger.info(f"✅ Successfully processed {successful_pages}/{len(page_results)} pages, extracted {total_chars} characters with PyMuPDF")
             
-            self.logger.info(f"✅ Successfully processed {successful_pages}/{len(page_results)} pages, extracted {len(full_text)} characters")
-            
-            if successful_pages == 0:
+            if successful_pages == 0 and page_results:
                 raise Exception("No content could be extracted from any page. This might be a scanned document requiring OCR.")
             
-            return full_text
+            return final_pages
             
         except Exception as e:
             error_msg = f"Failed to extract text with PyMuPDF: {str(e)}"
             self.logger.error(error_msg)
             
-            # Try pdfplumber as final fallback
             self.logger.info("Attempting pdfplumber fallback...")
             try:
                 return self._extract_with_pdfplumber(pdf_path, extract_tables)
             except Exception as fallback_error:
                 self.logger.error(f"Pdfplumber fallback also failed: {fallback_error}")
                 raise Exception(f"{error_msg}. Fallback with pdfplumber also failed: {fallback_error}")
-
     
     def _extract_text_blocks_with_proper_spacing(self, page: pymupdf.Page) -> List[Dict]:
         """Extract text blocks with proper word spacing and line handling."""
         text_blocks = []
         
         try:
-            # First, try to get text as dictionary with detailed formatting info
             text_dict = page.get_text("dict")
         except Exception as e:
-            self.logger.warning(f"Failed to get text dict, falling back to simple extraction: {e}")
-            # Fallback to simple text extraction
-            try:
-                simple_text = page.get_text()
-                if simple_text.strip():
-                    return [{
-                        'type': 'text',
-                        'content': simple_text,
-                        'bbox': page.rect
-                    }]
-                else:
-                    # If no text, try OCR-like extraction
-                    return self._fallback_text_extraction(page)
-            except Exception as fallback_error:
-                self.logger.error(f"All text extraction methods failed: {fallback_error}")
-                return self._fallback_text_extraction(page)
+            self.logger.warning(f"Failed to get text dict, falling back: {e}")
+            return self._fallback_text_extraction(page)
         
-        # Check if we got valid text dictionary
         if not text_dict or "blocks" not in text_dict:
             self.logger.warning("Invalid text dictionary, using fallback")
             return self._fallback_text_extraction(page)
         
-        current_line_y = None
-        current_line_text = ""
-        
         for block in text_dict.get("blocks", []):
-            if "lines" not in block:  # Skip non-text blocks (images, etc.)
+            if "lines" not in block:
                 continue
-                
+            
             block_text = ""
+            current_line_y = None
             
-            try:
-                for line in block["lines"]:
-                    line_bbox = line.get("bbox", [0, 0, 0, 0])
-                    line_y = line_bbox[1] if len(line_bbox) > 1 else 0
-                    
-                    # Check if this is a new line (significant y-coordinate change)
-                    if current_line_y is not None and abs(line_y - current_line_y) > 3:
-                        # Process the completed line
-                        if current_line_text.strip():
-                            processed_line = self._process_line_with_proper_spacing(current_line_text)
-                            block_text += processed_line + "\n"
-                        current_line_text = ""
-                    
-                    current_line_y = line_y
-                    
-                    # Extract text from spans with proper spacing
-                    line_text = ""
-                    prev_span_end = None
-                    
-                    for span in line.get("spans", []):
-                        span_text = span.get("text", "")
-                        span_bbox = span.get("bbox", [0, 0, 0, 0])
-                        
-                        if not span_text:  # Skip empty spans
-                            continue
-                        
-                        # Handle CID mapping issues
-                        if self._has_cid_issues(span_text):
-                            span_text = self._resolve_cid_text_advanced(span_text, span)
-                        
-                        # Add spacing between spans if there's a gap
-                        if prev_span_end is not None and len(span_bbox) > 2:
-                            gap = span_bbox[0] - prev_span_end
-                            if gap > 5:  # Significant gap, add space
-                                line_text += " "
-                        
-                        line_text += span_text
-                        if len(span_bbox) > 2:
-                            prev_span_end = span_bbox[2]  # Right edge of span
-                    
-                    current_line_text += line_text + " "
+            for line in block["lines"]:
+                line_y = line.get("bbox", [0, 0, 0, 0])[1]
                 
-            except Exception as block_error:
-                self.logger.warning(f"Error processing text block: {block_error}")
-                continue
-            
-            # Process the last line of the block
-            if current_line_text.strip():
-                processed_line = self._process_line_with_proper_spacing(current_line_text)
-                block_text += processed_line + "\n"
-                current_line_text = ""
+                line_text = ""
+                prev_span_end = None
+                for span in line.get("spans", []):
+                    span_text = span.get("text", "")
+                    if not span_text.strip():
+                        continue
+                    
+                    if self._has_cid_issues(span_text):
+                        span_text = self._resolve_cid_text_advanced(span_text, span)
+                    
+                    span_bbox = span.get("bbox", [0, 0, 0, 0])
+                    if prev_span_end is not None and span_bbox[0] - prev_span_end > 3: # Word gap threshold
+                        line_text += " "
+                    
+                    line_text += span_text
+                    prev_span_end = span_bbox[2]
+                
+                block_text += line_text + "\n"
             
             if block_text.strip():
                 text_blocks.append({
@@ -439,58 +384,10 @@ class TextExtractor:
                     'bbox': block.get("bbox", page.rect)
                 })
         
-        # If no text blocks were extracted, try fallback
         if not text_blocks:
             return self._fallback_text_extraction(page)
         
         return text_blocks
-    
-    def _process_line_with_proper_spacing(self, line_text: str) -> str:
-        """Process a line to ensure proper word spacing for complex scripts."""
-        # Remove excessive spaces and newlines within the line
-        line_text = re.sub(r'\s+', ' ', line_text.strip())
-        
-        # For non-english and similar scripts, ensure proper word boundaries
-        # This is a basic implementation - you might need more sophisticated rules
-        processed = ""
-        words = line_text.split()
-        
-        for i, word in enumerate(words):
-            # Clean individual words
-            word = word.strip()
-            if not word:
-                continue
-                
-            # Add the word
-            processed += word
-            
-            # Add space between words, but be careful with non-english conjuncts
-            if i < len(words) - 1:
-                next_word = words[i + 1].strip()
-                if next_word and not self._is_conjunct_continuation(word, next_word):
-                    processed += " "
-        
-        return processed
-    
-    def _is_conjunct_continuation(self, current_word: str, next_word: str) -> bool:
-        """Check if the next word is a continuation of a non-english conjunct."""
-        # Basic check for non-english conjuncts and joiners
-        if not current_word or not next_word:
-            return False
-            
-        # Check for non-english zero-width joiner or similar cases
-        non_eng_range = range(0x0D00, 0x0D80)
-        
-        # If both words contain non-english characters and current word ends with certain characters
-        current_has_non_eng = any(ord(c) in non_eng_range for c in current_word)
-        next_has_non_eng = any(ord(c) in non_eng_range for c in next_word)
-        
-        if current_has_non_eng and next_has_non_eng:
-            # Check for specific non-english joining patterns
-            if current_word.endswith(('്', '്‍')) or next_word.startswith(('്', '്‍')):
-                return True
-        
-        return False
     
     def _has_cid_issues(self, text: str) -> bool:
         """Check if text has CID mapping issues."""
@@ -501,115 +398,82 @@ class TextExtractor:
         if not self._has_cid_issues(text):
             return text
         
-        # Try to extract readable parts
-        processed = text
-        
-        # Handle different CID patterns
-        processed = re.sub(r'\(cid:\d+\)', '', processed, flags=re.IGNORECASE)
-        processed = re.sub(r'cid-\d+', '', processed, flags=re.IGNORECASE)
-        
-        # Clean up multiple spaces
-        processed = re.sub(r'\s+', ' ', processed).strip()
-        
-        return processed
-    
+        processed = re.sub(r'\s*\(cid:\d+\)\s*', '', text, flags=re.IGNORECASE)
+        processed = re.sub(r'\s*cid-\d+\s*', '', processed, flags=re.IGNORECASE)
+        return re.sub(r'\s+', ' ', processed).strip()
+
     def _format_table_as_text(self, table_data: List[List], page_num: int, table_num: int) -> str:
         """Format table data as readable text."""
         if not table_data:
             return ""
         
-        # Convert to DataFrame for better formatting
         try:
-            # Handle cases where first row might not be headers
-            df = pd.DataFrame(table_data)
-            
-            # Clean the data
-            df = df.fillna('')
-            df = df.astype(str)
-            
-            # Format as text
+            df = pd.DataFrame(table_data).fillna('').astype(str)
             formatted = f"\n{'='*60}\n"
             formatted += f"TABLE {table_num} (Page {page_num})\n"
             formatted += f"{'='*60}\n"
-            
-            # Use pandas to_string for clean formatting
             formatted += df.to_string(index=False, header=False, max_colwidth=30)
             formatted += f"\n{'='*60}\n"
-            
             return formatted
-            
         except Exception as e:
             self.logger.warning(f"Failed to format table: {e}")
             return f"\n[TABLE {table_num} - Page {page_num}: Formatting Error]\n"
     
-    def _extract_with_pdfplumber(self, pdf_path: Path, extract_tables: bool) -> str:
-        """Extract using pdfplumber with inline table handling."""
+    def _extract_with_pdfplumber(self, pdf_path: Path, extract_tables: bool) -> List[Dict[str, Union[int, str]]]:
+        """Extract using pdfplumber, returning content per page."""
         
-        def extract_page_content(page_data: Tuple[int, object]) -> str:
+        def extract_page_content(page_data: Tuple[int, pdfplumber.page.Page]) -> Dict[str, Union[int, str]]:
             page_num, page = page_data
-            page_content = f"\n--- Page {page_num + 1} ---\n"
+            page_content = ""
             
             try:
-                # Extract main text
-                text = page.extract_text() or ""
+                text = page.extract_text(x_tolerance=2, y_tolerance=2) or ""
+                page_content += text
                 
                 if extract_tables:
-                    # Get table locations to insert them in correct positions
                     tables = page.extract_tables()
-                    
                     if tables:
-                        # For simplicity, append tables at the end of page text
-                        page_content += text + "\n"
-                        
+                        page_content += "\n"
                         for i, table in enumerate(tables):
                             if table:
                                 formatted_table = self._format_table_as_text(table, page_num + 1, i + 1)
                                 page_content += formatted_table + "\n"
-                    else:
-                        page_content += text + "\n"
-                else:
-                    page_content += text + "\n"
-                
             except Exception as e:
-                self.logger.error(f"Error processing page {page_num + 1}: {e}")
-                page_content += f"[Error extracting page {page_num + 1}]\n"
-            
-            return page_content
+                self.logger.error(f"Error processing page {page_num + 1} with pdfplumber: {e}")
+                page_content = f"[Error extracting page {page_num + 1}]"
+
+            return {
+                'page_num': page_num + 1,
+                'content': self._clean_final_text(page_content)
+            }
         
         try:
             with pdfplumber.open(pdf_path) as pdf:
-                # Process pages in parallel
                 with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                     page_data = [(i, pdf.pages[i]) for i in range(len(pdf.pages))]
                     page_results = list(executor.map(extract_page_content, page_data))
             
-            # Combine all pages
-            full_text = "".join(page_results)
-            full_text = self._clean_final_text(full_text)
-            
-            self.logger.info(f"✅ Extracted {len(full_text)} characters")
-            return full_text
+            total_chars = sum(len(page['content']) for page in page_results)
+            self.logger.info(f"✅ Extracted {total_chars} characters from {len(page_results)} pages using pdfplumber.")
+            return page_results
             
         except Exception as e:
             raise Exception(f"Failed to extract text with pdfplumber: {str(e)}")
     
     def _clean_final_text(self, text: str) -> str:
         """Final cleanup of extracted text."""
-        # Remove excessive line breaks but preserve paragraph structure
-        text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)  # Max 2 consecutive newlines
-        text = re.sub(r'[ \t]+', ' ', text)  # Multiple spaces/tabs to single space
-        text = re.sub(r'[ \t]*\n[ \t]*', '\n', text)  # Clean spaces around newlines
-        
-        # Remove trailing whitespace from each line
+        if not text:
+            return ""
+        text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
+        text = re.sub(r'[ \t]+', ' ', text)
+        text = re.sub(r'[ \t]*\n[ \t]*', '\n', text)
         lines = text.split('\n')
         cleaned_lines = [line.rstrip() for line in lines]
-        text = '\n'.join(cleaned_lines)
-        
-        return text.strip()
+        return '\n'.join(cleaned_lines).strip()
     
     def validate_extracted_text(self, text: str, min_chars: int = 50) -> Tuple[bool, Dict]:
         """
-        Validate extracted text with detailed feedback.
+        Validate extracted text from a single page with detailed feedback.
        
         Args:
             text: The extracted text to validate
@@ -630,22 +494,15 @@ class TextExtractor:
         if not text or not text.strip():
             return False, details
         
-        # Count different character types
         details['alphabetic_chars'] = sum(1 for char in text if char.isalpha())
+        details['cid_issues'] = len(re.findall(r'\(cid:\d+\)|cid-\d+|\[\?\]', text, re.IGNORECASE))
         
-        # Count CID issues
-        cid_matches = re.findall(r'\(cid:\d+\)|cid-\d+|\[\?\]', text, re.IGNORECASE)
-        details['cid_issues'] = len(cid_matches)
-        
-        # Check line break ratio (to detect excessive line breaking)
-        newline_count = text.count('\n')
         if details['total_chars'] > 0:
-            details['line_breaks_ratio'] = newline_count / details['total_chars']
+            details['line_breaks_ratio'] = text.count('\n') / details['total_chars']
         
-        # Validation logic
         details['validation_passed'] = (
             details['alphabetic_chars'] >= min_chars and 
-            details['line_breaks_ratio'] < 0.1  # Less than 10% line breaks
+            details['line_breaks_ratio'] < 0.1
         )
         
         return details['validation_passed'], details

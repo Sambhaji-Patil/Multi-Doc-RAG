@@ -6,7 +6,7 @@ Main orchestrator class that uses all preprocessing modules to process documents
 
 import os
 import asyncio
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 from pathlib import Path
 
 from config.config import OUTPUT_DIR
@@ -47,6 +47,9 @@ class ModularDocumentPreprocessor:
         self.embedding_manager = EmbeddingManager()
         self.vector_storage = VectorStorage(self.base_db_path)
         self.metadata_manager = MetadataManager(self.base_db_path)
+        
+        # In-memory cache for special document types (images, tabular, etc.)
+        self.special_content_cache: Dict[str, Any] = {}
         self.cached_chunks = {}
         
         print("✅ Modular Document Preprocessor initialized successfully")
@@ -61,7 +64,21 @@ class ModularDocumentPreprocessor:
                 print(f"⚠️  Directory {self.base_db_path} should exist in production environment")
                 if not self.base_db_path.exists():
                     raise RuntimeError(f"Required directory {self.base_db_path} does not exist and cannot be created")
-    
+
+    # New function to retrieve special content
+    def get_special_document_details(self, doc_id: str) -> Any:
+        """
+        Retrieves the cached content for a special document type (image, tabular, oneshot).
+        
+        Args:
+            doc_id: The unique ID of the document.
+            
+        Returns:
+            The cached content (e.g., file path for images, full text for tabular/oneshot)
+            or None if the doc_id is not in the cache or is a 'normal' vectorized document.
+        """
+        return self.special_content_cache.get(doc_id)
+
     # Delegate metadata operations to metadata manager
     def generate_doc_id(self, document_url: str) -> str:
         """Generate a unique document ID from the URL."""
@@ -83,123 +100,123 @@ class ModularDocumentPreprocessor:
         """Get statistics about all collections."""
         return self.metadata_manager.get_collection_stats()
     
-    async def process_document(self, document_url: str, force_reprocess: bool = False, timeout: int = 300) -> str | List:
+    async def process_document(self, document_url: str, force_reprocess: bool = False, timeout: int = 300, skip_length_check=False) -> Tuple[str, str]:
         """
-        Process a single document: download, extract, chunk, embed, and store.
+        Process a single document. Returns its ID and type.
         
         Args:
-            document_url: URL of the document
-            force_reprocess: If True, reprocess even if already processed
-            timeout: Download timeout in seconds (default: 300s/5min)
+            document_url: URL of the document.
+            force_reprocess: If True, reprocess even if already processed.
+            timeout: Download timeout in seconds.
             
         Returns:
-            str: Document ID
+            A tuple containing:
+            - doc_id (str): The unique document ID.
+            - doc_type (str): The type of document, one of ["normal", "image", "tabular", "oneshot", "error"].
         """
         doc_id = self.generate_doc_id(document_url)
         
-        # Check if already processed
         if not force_reprocess and self.is_document_processed(document_url):
             print(f"✅ Document {doc_id} already processed, skipping...")
-            return doc_id
+            return doc_id, "normal"
         
         print(f"🚀 Processing document: {doc_id}")
         print(f"📄 URL: {document_url}")
         
         temp_file_path = None
+        ext = None
         try:
             # Step 1: Download Document
-            temp_file_path, ext = await self.file_downloader.download_file(document_url, timeout=timeout)
+            temp_file_path, ext = await self.file_downloader.fetch_file(document_url, timeout=timeout)
             
             if temp_file_path == 'not supported':
-                return ['unsupported', ext]
+                return f"⚠️ Document type '{ext}' is not supported.", "error"
 
-            # Step 2: Extract text
+            # Step 2: Extract text or identify special type
             full_text = ""
+            doc_type = "normal" # Assume normal processing unless specified otherwise
+
             match ext.lower():
                 case 'pdf':
                     full_text = self.text_extractor.extract_text_from_pdf(temp_file_path)
-                
                 case 'docx':
                     full_text = extract_docx(temp_file_path)
-                
                 case 'pptx':
                     full_text = extract_pptx(temp_file_path)
-                    return [full_text, 'oneshot']
-                
-                case 'url':
-                    new_context = "URL for Context: " + temp_file_path
-                    return [new_context, 'oneshot']
-                
                 case 'txt':
-                    with open (temp_file_path, 'r') as f:
+                    with open(temp_file_path, 'r') as f:
                         full_text = f.read()
+                
+                # --- Handle Special Types ---
+                case 'url':
+                    content = "URL for Context: " + temp_file_path
+                    self.special_content_cache[doc_id] = content
+                    self.metadata_manager.save_document_metadata([content], doc_id, document_url)
+                    return doc_id, "oneshot"
                 
                 case 'xlsx':
-                    full_text = extract_xlsx(temp_file_path)
-                    return [full_text, 'tabular']
+                    content = extract_xlsx(temp_file_path)
+                    self.special_content_cache[doc_id] = content
+                    self.metadata_manager.save_document_metadata([str(content)], doc_id, document_url)
+                    return doc_id, "tabular"
                 
                 case 'csv':
-                    with open (temp_file_path, 'r') as f:
-                        full_text = f.read()
-                    return [full_text, 'tabular']
+                    with open(temp_file_path, 'r') as f:
+                        content = f.read()
+                    self.special_content_cache[doc_id] = content
+                    self.metadata_manager.save_document_metadata([content], doc_id, document_url)
+                    return doc_id, "tabular"
 
-                case 'png':
-                    # Don't clean up image files - they'll be cleaned up by the caller
-                    return [temp_file_path, 'image', True]  # Third element indicates no cleanup needed
-                
-                case 'jpeg':
-                    return [temp_file_path, 'image', True]  
-                
-                case 'jpg':
-                    return [temp_file_path, 'image', True]  
+                case 'png' | 'jpeg' | 'jpg':
+                    self.special_content_cache[doc_id] = temp_file_path
+                    self.metadata_manager.save_document_metadata([temp_file_path], doc_id, document_url)
+                    # Note: The caller is responsible for not deleting the temp file if it's an image.
+                    return doc_id, "image"
 
-            # Validate extracted text
-            if not self.text_extractor.validate_extracted_text(full_text):
-                raise Exception("No meaningful text extracted from PDF")
-            
+            # --- Continue with normal text processing ---
             # Step 3: Create chunks
-            chunks = self.cached_chunks.get(document_url)
-            if not chunks:
-                chunks = self.text_chunker.chunk_text(full_text)
-                self.cached_chunks[document_url] = chunks
-            else:
-                print("Using Cache: Skipped chunking")
-            if len(chunks) < 5:
-                    print(f"Only {len(chunks)} chunks formed, going for oneshot.")
-                    return [full_text, 'oneshot']
+            import json
+            with open(f"test/extracted/{temp_file_path.split('\\')[-1]}.json", 'w', encoding='utf-8') as f:
+                if isinstance(full_text, str):
+                    f.write(full_text)
+                else:
+                    json.dump(full_text, f)
+
+            chunks = self.text_chunker.chunk_text(full_text, doc_id=doc_id)
+
+            
+            with open(f"test/chunks/{temp_file_path.split('\\')[-1]}.json", 'w', encoding='utf-8') as f:
+                json.dump(chunks, f)
+            
+            # Handle short documents as a special 'oneshot' type
+            if (not skip_length_check) and len(chunks) < 5:
+                print(f"Only {len(chunks)} chunks formed, treating as 'oneshot'.")
+                self.special_content_cache[doc_id] = full_text
+                self.metadata_manager.save_document_metadata(chunks, doc_id, document_url)
+                return doc_id, "oneshot"
             
             if not chunks:
-                raise Exception("No chunks created from text")
+                raise ValueError("No chunks created from text")
             
-            # Log chunk statistics
-            chunk_stats = self.text_chunker.get_chunk_stats(chunks)
-            print(f"Chunk Statistics: {chunk_stats['total_chunks']} chunks, "
-                  f"avg size: {chunk_stats['avg_chunk_size']:.0f} chars")
+            print(f"Chunk Statistics: {len(chunks)} chunks.")
             
-            # Step 4: Create embeddings
+            # Step 4: Create embeddings and store
             embeddings = await self.embedding_manager.create_embeddings(chunks)
-            
-            # Validate embeddings
             if not self.embedding_manager.validate_embeddings(embeddings, len(chunks)):
-                raise Exception("Invalid embeddings generated")
+                raise ValueError("Invalid embeddings generated")
             
-            # Step 5: Store in Qdrant
             await self.vector_storage.store_in_qdrant(chunks, embeddings, doc_id)
             
-            # Step 6: Save metadata
+            # Step 5: Save metadata
             self.metadata_manager.save_document_metadata(chunks, doc_id, document_url)
             
-            print(f"✅ Document {doc_id} processed successfully: {len(chunks)} chunks")
-            return doc_id
+            print(f"✅ Document {doc_id} processed successfully as '{doc_type}'")
+            return doc_id, doc_type
             
         except Exception as e:
             print(f"❌ Error processing document {doc_id}: {str(e)}")
-            raise
-        # finally:
-            # Clean up temporary file - but NOT for images since they need the file path
-            # Images return a third element indicating no cleanup needed
-            # if temp_file_path and ext not in ['png', 'jpeg', 'jpg']:
-            #     self.file_downloader.cleanup_temp_file(temp_file_path)
+            return doc_id, "error"
+
     
     async def process_multiple_documents(self, document_urls: List[str], force_reprocess: bool = False) -> Dict[str, str]:
         """
@@ -213,17 +230,16 @@ class ModularDocumentPreprocessor:
             Dict[str, str]: Mapping of URLs to document IDs
         """
         print(f"🚀 Processing {len(document_urls)} documents...")
-        
         results = {}
-        
-        # Process documents concurrently (with limited concurrency)
-        semaphore = asyncio.Semaphore(3)  # Limit to 3 concurrent downloads
+        semaphore = asyncio.Semaphore(3)
         
         async def process_single(url):
             async with semaphore:
                 try:
-                    doc_id = await self.process_document(url, force_reprocess)
-                    return url, doc_id
+                    doc_id, doc_type = await self.process_document(url, force_reprocess)
+                    if doc_type != "error":
+                        return url, doc_id
+                    return url, None
                 except Exception as e:
                     print(f"❌ Failed to process {url}: {str(e)}")
                     return url, None
@@ -241,12 +257,7 @@ class ModularDocumentPreprocessor:
         return results
     
     def get_system_info(self) -> Dict[str, Any]:
-        """
-        Get information about the preprocessing system.
-        
-        Returns:
-            Dict[str, Any]: System information
-        """
+        """Get information about the preprocessing system."""
         return {
             "base_db_path": str(self.base_db_path),
             "embedding_model": self.embedding_manager.get_model_info(),
@@ -259,23 +270,19 @@ class ModularDocumentPreprocessor:
         }
     
     def cleanup_document(self, document_url: str) -> bool:
-        """
-        Remove all data for a specific document.
-        
-        Args:
-            document_url: URL of the document to clean up
-            
-        Returns:
-            bool: True if successfully cleaned up
-        """
+        """Remove all data for a specific document."""
         doc_id = self.generate_doc_id(document_url)
         
         try:
-            # Remove vector storage
-            vector_removed = self.vector_storage.delete_collection(doc_id)
+            # Remove from vector storage
+            vector_removed = self.vector_storage.delete_document(doc_id)
             
-            # Remove metadata
+            # Remove from metadata
             metadata_removed = self.metadata_manager.remove_document_metadata(doc_id)
+            
+            # Remove from in-memory cache
+            if doc_id in self.special_content_cache:
+                del self.special_content_cache[doc_id]
             
             success = vector_removed and metadata_removed
             if success:

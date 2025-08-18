@@ -15,7 +15,7 @@ class ContextManager:
         """Initialize the context manager."""
         print("🟢-> Context Manager initialized")
     
-    def create_enhanced_context(self, question: str, results: List[Dict], max_length: int = MAX_CONTEXT_LENGTH) -> str:
+    def create_enhanced_context(self, question: str, results: List[Dict], max_length: int = MAX_CONTEXT_LENGTH, extra_chunks=[]) -> str:
         """Create enhanced context ensuring each query contributes equally."""
         # Group results by expanded query index
         query_to_chunks = defaultdict(list)
@@ -59,21 +59,19 @@ class ContextManager:
             for i, result in query_to_chunks[q_idx]:
                 if i not in added_chunks and query_chunks_added < query_chunk_limit:
                     text = result['payload'].get('text', '')
-                    relevance_info = ""
-                    if 'rerank_score' in result:
-                        relevance_info = f" [Relevance: {result['rerank_score']:.2f}]"
-                    elif 'final_score' in result:
-                        relevance_info = f" [Score: {result['final_score']:.2f}]"
-                    doc_text = f"[Query {q_idx+1} Doc {len(added_chunks)+1}]{relevance_info}\n{text}\n"
+                    doc_id = result['payload'].get('doc_id', '')
+                    doc_text = f"\n---\ndoc_id: {doc_id}\ncontent: {text}\n"
                     
                     if current_length + len(doc_text) > max_length:
                         print(f"   🔴-> Context length limit reached at {current_length} chars")
-                        break
-                    
+                        break 
                     context_parts.append(doc_text)
                     current_length += len(doc_text)
                     added_chunks.add(i)
                     query_chunks_added += 1
+
+            for chunk in extra_chunks:
+                context_parts.append(f"---\n{chunk}\n")
             
             print(f"   Query {q_idx+1}: Added {query_chunks_added} chunks")
         

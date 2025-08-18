@@ -9,10 +9,14 @@ import tempfile
 import os
 
 
-from config.config import OCR_SPACE_API_KEY
+# This part requires a config file or environment variable for the API key.
+# For demonstration, you can replace OCR_SPACE_API_KEY with your actual key string.
+# from config.config import OCR_SPACE_API_KEY
+from config.config import OCR_SPACE_API_KEY # <-- IMPORTANT: Replace with your actual OCR Space API key
+
 API_URL = "https://api.ocr.space/parse/image"
 
-assert OCR_SPACE_API_KEY, "OCR_SPACE_API_KEY not set"
+assert OCR_SPACE_API_KEY != "YOUR_API_KEY_HERE", "OCR_SPACE_API_KEY not set."
 
 def ocr_space_file(filename, api_key=OCR_SPACE_API_KEY, overlay=False, language="eng"):
     """Extract text from image file using OCR Space API"""
@@ -61,7 +65,7 @@ def batch_ocr_parallel(filenames, max_workers=5):
             results[fname] = text
     return results
 
-def extract_pptx_with_meta(pptx_path: str, tesseract_cmd: str = None) -> List[Dict[str, Any]]:
+def extract_pptx_with_meta(pptx_path: str) -> List[Dict[str, Any]]:
     """Extract content from PPTX with metadata, using OCR Space API for images"""
     prs = Presentation(pptx_path)
     all_slides_content = []
@@ -178,20 +182,99 @@ def extract_pptx_with_meta(pptx_path: str, tesseract_cmd: str = None) -> List[Di
     
     return all_slides_content
 
-def extract_pptx(filepath: str) -> str:
+# MODIFIED FUNCTION
+def extract_pptx(filepath: str) -> List[Dict[str, Any]]:
     """
-    Converts extracted pptx content into a plain text string for LLM input.
-    Removes all metadata like slide numbers, block types, etc.
+    Extracts content from a PPTX file and organizes it by slide number.
+
+    Each slide's text, table data, and image OCR results are combined into a
+    single string.
+
+    Args:
+        filepath: The path to the .pptx file.
+
+    Returns:
+        A list of dictionaries, where each dictionary represents a slide
+        and has the format: {'page_num': slide_number, 'content': '...'}
     """
-    text_blocks = []
+    slides_output = []
     
-    for slide in extract_pptx_with_meta(filepath):
-        for block in slide["content_blocks"]:
+    # Get the detailed, structured data from the meta function
+    structured_slides = extract_pptx_with_meta(filepath)
+    
+    # Iterate over each slide's data
+    for slide_data in structured_slides:
+        # Collect all content from the current slide's blocks into a list
+        slide_content_blocks = []
+        for block in slide_data["content_blocks"]:
             content = block.get("content", "").strip()
             if content:
-                text_blocks.append(content)
-                
-        # Optionally separate slides with a line
-        text_blocks.append("\n--- End of Slide ---\n")
+                slide_content_blocks.append(content)
+        
+        # Join the content blocks for this slide into a single string
+        full_slide_content = "\n".join(slide_content_blocks)
+        
+        # Create the dictionary in the desired format and add it to our results list
+        # Only add slides that have extracted content
+        if full_slide_content:
+            slides_output.append({
+                "page_num": slide_data["slide_number"],
+                "content": full_slide_content
+            })
+            
+    return slides_output
+
+# Example usage:
+if __name__ == '__main__':
+    # Create a dummy presentation for testing
+    from pptx.util import Inches
+
+    # Create a dummy pptx file
+    prs = Presentation()
+    # Slide 1: Title and text
+    slide1 = prs.slides.add_slide(prs.slide_layouts[1])
+    title = slide1.shapes.title
+    title.text = "Slide 1: Title"
+    content_box = slide1.shapes.placeholders[1]
+    content_box.text = "This is some text on the first slide."
     
-    return "\n".join(text_blocks).strip()
+    # Slide 2: Table
+    slide2 = prs.slides.add_slide(prs.slide_layouts[5])
+    title = slide2.shapes.title
+    title.text = "Slide 2: Table"
+    table = slide2.shapes.add_table(rows=2, cols=2, left=Inches(2), top=Inches(2), width=Inches(4), height=Inches(1.5)).table
+    table.cell(0, 0).text = "Header 1"
+    table.cell(0, 1).text = "Header 2"
+    table.cell(1, 0).text = "Cell A"
+    table.cell(1, 1).text = "Cell B"
+    
+    # Slide 3: Blank (will be skipped in output)
+    prs.slides.add_slide(prs.slide_layouts[6])
+
+    # Slide 4: Notes
+    slide4 = prs.slides.add_slide(prs.slide_layouts[1])
+    title = slide4.shapes.title
+    title.text = "Slide 4: With Notes"
+    notes_slide = slide4.has_notes_slide and slide4.notes_slide
+    text_frame = notes_slide.notes_text_frame
+    text_frame.text = "This is a presenter note."
+
+    dummy_pptx_path = "dummy_presentation.pptx"
+    prs.save(dummy_pptx_path)
+
+    print(f"Created a dummy presentation: {dummy_pptx_path}")
+    print("-" * 20)
+
+    # Run the extraction function
+    # Note: OCR will not run as we haven't added images.
+    # To test OCR, you would need to add an image to a slide.
+    extracted_data = extract_pptx(dummy_pptx_path)
+    
+    # Print the result in a readable format
+    import json
+    print("Extraction Result:")
+    print(json.dumps(extracted_data, indent=2))
+
+    # Clean up the dummy file
+    os.remove(dummy_pptx_path)
+    print(f"\nRemoved dummy file: {dummy_pptx_path}")

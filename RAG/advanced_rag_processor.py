@@ -5,7 +5,7 @@ Version: 3.1 - Updated for Enhanced LLM Handler with Provider Fallback
 """
 
 import time
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 from pathlib import Path
 
 # Import all modular components
@@ -114,7 +114,7 @@ class AdvancedRAGProcessor:
             self.provider_usage_stats[provider][stage] = 0
         self.provider_usage_stats[provider][stage] += 1
     
-    async def answer_question(self, question: str, doc_id: str, logger=None, request_id: str = None) -> Tuple[str, Dict[str, float]]:
+    async def answer_question(self, question: str, doc_id:List[str], logger=None, request_id: str = None, extra_chunks = []) -> Tuple[str, Dict[str, float]]:
         """
         Answer a question using advanced RAG techniques with detailed timing.
         
@@ -130,17 +130,7 @@ class AdvancedRAGProcessor:
         timings = {}
         providers_used = []
         overall_start = time.time()
-        
         try:
-            # Check if collection exists
-            collection_name = f"{doc_id}_collection"
-            try:
-                client = self.search_manager.get_qdrant_client(doc_id)
-                collection_info = client.get_collection(collection_name)
-            except Exception:
-                return "I don't have information about this document. Please ensure the document has been processed.", timings
-            
-            print(f"\nAdvanced RAG processing for: {question[:100]}...")
             
             # Step 1: Query Expansion
             step_start = time.time()
@@ -186,7 +176,7 @@ class AdvancedRAGProcessor:
             # Step 3: Reranking
             step_start = time.time()
             try:
-                reranked_results_result = await self.reranking_manager.rerank_results(question, search_results)
+                reranked_results_result = await self.reranking_manager.rerank_results(question, search_results, reserved=len(extra_chunks))
                 
                 # Handle both old and new response formats
                 if isinstance(reranked_results_result, dict) and 'text' in reranked_results_result:
@@ -214,7 +204,7 @@ class AdvancedRAGProcessor:
             
             # Step 4: Multi-perspective Context Creation
             step_start = time.time()
-            context = self.context_manager.create_enhanced_context(question, reranked_results)
+            context = self.context_manager.create_enhanced_context(question, reranked_results, extra_chunks=extra_chunks)
             context_time = time.time() - step_start
             timings['context_creation'] = context_time
             if logger and request_id:
@@ -260,6 +250,7 @@ class AdvancedRAGProcessor:
             timings['error_time'] = error_time
             timings['providers_used'] = providers_used
             print(f"🔴-> Error in advanced RAG processing: {str(e)}")
+            raise e.with_traceback
             return f"I encountered an error while processing your question: {str(e)}", timings
     
     def get_provider_usage_stats(self) -> Dict:

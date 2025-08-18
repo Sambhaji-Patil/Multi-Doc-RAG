@@ -25,8 +25,10 @@ class RerankingManager:
         # self.reranker_model.save(RERANKER_MODEL)
         print(f"🟢-> Reranker model loaded successfully")
     
-    async def rerank_results(self, query: str, search_results: List[Dict]) -> List[Dict]:
+    async def rerank_results(self, query: str, search_results: List[Dict], reserved = 0) -> List[Dict]:
         """Rerank search results using cross-encoder."""
+        if reserved == RERANK_TOP_K:
+            return []
         if not ENABLE_RERANKING or not self.reranker_model or len(search_results) <= 1:
             return search_results
         
@@ -57,7 +59,7 @@ class RerankingManager:
             )
             
             print(f"🎯 Reranked {len(search_results)} results")
-            return reranked_results[:RERANK_TOP_K]
+            return reranked_results[:RERANK_TOP_K - reserved]
             
         except Exception as e:
             print(f"🔴-> Reranking failed: {e}")

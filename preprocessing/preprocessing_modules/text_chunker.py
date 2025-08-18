@@ -4,7 +4,7 @@ Handles chunking text into smaller pieces with overlap for better context preser
 """
 
 import re
-from typing import List
+from typing import List, Dict, Any
 from config.config import CHUNK_SIZE, CHUNK_OVERLAP
 
 
@@ -16,149 +16,103 @@ class TextChunker:
         self.chunk_size = CHUNK_SIZE
         self.chunk_overlap = CHUNK_OVERLAP
     
-    def chunk_text(self, text: str) -> List[str]:
+    def chunk_text(self, pages: List[Dict[str, Any]], doc_id: str) -> List[str]:
         """
         Chunk text into smaller pieces with overlap.
         
         Args:
-            text: The input text to chunk
+            pages: List of dicts like [{ "page_num": int, "content": str }]
             
         Returns:
-            List[str]: List of text chunks
+            List[dict]: List of chunks with page number and content
         """
         print(f"✂️ Chunking text into {self.chunk_size} character chunks with {self.chunk_overlap} overlap")
-        
-        # Clean the text
-        cleaned_text = self._clean_text(text)
-        
+
+        # Merge all pages into one text, but keep track of offsets
+        merged_text = ""
+        page_boundaries = []  # [(page_num, start_offset, end_offset)]
+        offset = 0
+
+        for p in pages:
+            content = self._clean_text(p["content"])
+            start_offset = offset
+            merged_text += content + " "
+            offset = len(merged_text)
+            page_boundaries.append((p["page_num"], start_offset, offset))
+
         chunks = []
         start = 0
-        
-        while start < len(cleaned_text):
+
+        while start < len(merged_text):
             end = start + self.chunk_size
-            
-            # Try to end at sentence boundary
-            if end < len(cleaned_text):
-                end = self._find_sentence_boundary(cleaned_text, start, end)
-            
-            chunk = cleaned_text[start:end].strip()
-            
-            # Only add chunk if it's meaningful
-            if chunk and len(chunk) > 50:
-                chunks.append(chunk)
-            
-            # Move start position with overlap
+
+            if end < len(merged_text):
+                end = self._find_sentence_boundary(merged_text, start, end)
+
+            chunk_text = merged_text[start:end].strip()
+
+            if chunk_text and len(chunk_text) > 50:
+                # Find which page the chunk starts in
+                chunk_page = self._get_page_for_offset(start, page_boundaries)
+                chunks.append(f"--- doc id: {doc_id}, page number: {chunk_page}\n{chunk_text}\n")
+
+            # Move start with overlap
             start = end - self.chunk_overlap
-            if start >= len(cleaned_text):
+            if start >= len(merged_text):
                 break
-        
+
         print(f"✅ Created {len(chunks)} chunks (size={self.chunk_size}, overlap={self.chunk_overlap})")
         return chunks
-    
-    def _clean_text(self, text: str) -> str:
+
+    def _get_page_for_offset(self, offset: int, page_boundaries: List[tuple]) -> int:
         """
-        Clean text by normalizing whitespace and removing excessive line breaks.
+        Find the page number for a given character offset in merged text.
         Args:
-            text: Raw text to clean
+            offset: Character offset
+            page_boundaries: List of (page_num, start_offset, end_offset)
         Returns:
-            str: Cleaned text
+            int: Page number where this offset belongs
         """
-        # Replace multiple whitespace with single space
-        text = re.sub(r'\s+', ' ', text)
-        return text.strip()
+        for page_num, start, end in page_boundaries:
+            if start <= offset < end:
+                return page_num
+        return page_boundaries[-1][0]  # fallback: last page
+
+    def _clean_text(self, text: str) -> str:
+        """Clean text by normalizing whitespace and removing excessive line breaks."""
+        return re.sub(r'\s+', ' ', text).strip()
     
     def _find_sentence_boundary(self, text: str, start: int, preferred_end: int) -> int:
-        """
-        Find the best sentence boundary near the preferred end position.
-        
-        Args:
-            text: The full text
-            start: Start position of the chunk
-            preferred_end: Preferred end position
-            
-        Returns:
-            int: Adjusted end position at sentence boundary
-        """
-        # Look for sentence endings within a reasonable range
+        """Find the best sentence boundary near the preferred end position."""
         search_start = max(start, preferred_end - 100)
         search_end = min(len(text), preferred_end + 50)
         
         sentence_endings = ['.', '!', '?']
         best_end = preferred_end
         
-        # Search backwards from preferred end for sentence boundary
         for i in range(preferred_end - 1, search_start - 1, -1):
             if text[i] in sentence_endings:
-                # Check if this looks like a real sentence ending
                 if self._is_valid_sentence_ending(text, i):
                     best_end = i + 1
                     break
-        
         return best_end
     
     def _is_valid_sentence_ending(self, text: str, pos: int) -> bool:
-        """
-        Check if a punctuation mark represents a valid sentence ending.
-        
-        Args:
-            text: The full text
-            pos: Position of the punctuation mark
-            
-        Returns:
-            bool: True if it's a valid sentence ending
-        """
-        # Avoid breaking on abbreviations like "Dr.", "Mr.", etc.
+        """Check if a punctuation mark represents a valid sentence ending."""
         if pos > 0 and text[pos] == '.':
-            # Look at the character before the period
             char_before = text[pos - 1]
             if char_before.isupper():
-                # Might be an abbreviation
                 word_start = pos - 1
                 while word_start > 0 and text[word_start - 1].isalpha():
                     word_start -= 1
-                
                 word = text[word_start:pos]
-                # Common abbreviations to avoid breaking on
                 abbreviations = {'Dr', 'Mr', 'Mrs', 'Ms', 'Prof', 'Inc', 'Ltd', 'Corp', 'Co'}
                 if word in abbreviations:
                     return False
         
-        # Check if there's a space or newline after the punctuation
         if pos + 1 < len(text):
             next_char = text[pos + 1]
             return next_char.isspace() or next_char.isupper()
-        
         return True
-    
-    def get_chunk_stats(self, chunks: List[str]) -> dict:
-        """
-        Get statistics about the created chunks.
-        
-        Args:
-            chunks: List of text chunks
-            
-        Returns:
-            dict: Statistics about the chunks
-        """
-        if not chunks:
-            return {
-                "total_chunks": 0,
-                "total_characters": 0,
-                "total_words": 0,
-                "avg_chunk_size": 0,
-                "min_chunk_size": 0,
-                "max_chunk_size": 0
-            }
-        
-        chunk_sizes = [len(chunk) for chunk in chunks]
-        total_chars = sum(chunk_sizes)
-        total_words = sum(len(chunk.split()) for chunk in chunks)
-        
-        return {
-            "total_chunks": len(chunks),
-            "total_characters": total_chars,
-            "total_words": total_words,
-            "avg_chunk_size": total_chars / len(chunks),
-            "min_chunk_size": min(chunk_sizes),
-            "max_chunk_size": max(chunk_sizes)
-        }
+
+
