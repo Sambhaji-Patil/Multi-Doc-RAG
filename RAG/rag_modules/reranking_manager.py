@@ -27,7 +27,7 @@ class RerankingManager:
     
     async def rerank_results(self, query: str, search_results: List[Dict], reserved = 0) -> List[Dict]:
         """Rerank search results using cross-encoder."""
-        if reserved == RERANK_TOP_K:
+        if reserved >= RERANK_TOP_K:
             return []
         if not ENABLE_RERANKING or not self.reranker_model or len(search_results) <= 1:
             return search_results

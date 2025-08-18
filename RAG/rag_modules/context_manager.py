@@ -71,7 +71,6 @@ class ContextManager:
         
         except Exception as e:
             print(e)
-            raise
         
         if extra_chunks:
             print(f"   ➕ Adding {len(extra_chunks)} manually provided extra chunks.")

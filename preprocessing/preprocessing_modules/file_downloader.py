@@ -34,8 +34,12 @@ class FileDownloader:
                 raise ValueError("Argument 'filename' must be provided when source is bytes.")
             return self._handle_bytes(source, filename)
         elif isinstance(source, str):
+            # Handle local file paths (including URL-encoded paths)
+            decoded_source = unquote(source)
             if os.path.exists(source):
                 return self._handle_path(source)
+            elif os.path.exists(decoded_source):
+                return self._handle_path(decoded_source)
             else:
                 # Pass session-related configs to the handler
                 return await self._handle_url(source, timeout, max_retries)
@@ -43,17 +47,36 @@ class FileDownloader:
             raise TypeError("Source must be a URL string, a local file path string, or bytes.")
 
     def _handle_path(self, path: str) -> Tuple[str, str]:
-        # ... (same as before) ...
-        print(f"📂 Processing local file: {path}")
-        cache_key = os.path.abspath(path)
-        _, ext = os.path.splitext(path)
+        """Handle local file paths with proper normalization and URL decoding."""
+        # Decode URL encoding if present and normalize path
+        decoded_path = unquote(path)
+        normalized_path = os.path.normpath(os.path.abspath(decoded_path))
+        
+        print(f"Processing local file: {path}")
+        if path != decoded_path:
+            print(f"Decoded to: {decoded_path}")
+        print(f"Normalized to: {normalized_path}")
+        
+        # Check if file actually exists
+        if not os.path.exists(normalized_path):
+            raise FileNotFoundError(f"Local file not found: {normalized_path}")
+        
+        cache_key = normalized_path
+        _, ext = os.path.splitext(normalized_path)
         if not ext:
             raise ValueError("File from path does not have an extension.")
+        
+        # Check supported file types
+        supported_extensions = ['.pdf', '.docx', '.pptx', '.png', '.xlsx', '.jpeg', '.jpg', '.txt', '.csv']
+        if ext.lower() not in supported_extensions:
+            raise ValueError(f"File type '{ext}' is not supported. Supported types: {supported_extensions}")
+        
         cache_path = self._get_cache_path(cache_key, ext)
         if os.path.exists(cache_path):
             print(f"⚡ Cache hit! Using cached file: {cache_path}")
             return cache_path, ext.lstrip(".")
-        shutil.copy(path, cache_path)
+        
+        shutil.copy(normalized_path, cache_path)
         print(f"✅ File copied to cache: {cache_path}")
         return cache_path, ext.lstrip(".")
 
