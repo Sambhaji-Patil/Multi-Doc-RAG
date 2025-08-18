@@ -82,5 +82,4 @@ def extract_xlsx(xlsx_path: str, tesseract_cmd: str = None) -> List[Dict[str, An
 
 if __name__ == "__main__":
      
-     x = "\n\n".join([f"---\npage number: {d['page_num']}\n {d['content']}" for d in extract_xlsx(r"C:\Users\Rahul\Desktop\test.xlsx")])
-     print(x)
+    print(extract_xlsx(r"C:\Users\Rahul\Desktop\test.xlsx"))
