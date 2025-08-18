@@ -13,6 +13,7 @@ import google.generativeai as genai
 from groq import Groq
 from config.config import get_provider_configs, MAX_TOKENS, TEMPERATURE
 
+from datetime import datetime
 
 class ProviderType(Enum):
     """Enum for LLM provider types."""
@@ -216,6 +217,7 @@ class UnifiedLLMHandler:
                           max_tokens: Optional[int] = None,
                           reasoning_format: str = "hidden") -> Dict[str, Any]:
         """
+
         Generate text using available LLM provider instances with automatic fallback.
         
         Args:
@@ -228,6 +230,10 @@ class UnifiedLLMHandler:
         Returns:
             Dictionary with 'text', 'provider', 'instance', and 'model' keys
         """
+        
+        with open(f"test/context/{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", 'w') as f:
+            f.write(user_prompt)
+
         temp = temperature if temperature is not None else TEMPERATURE
         max_tok = max_tokens if max_tokens is not None else MAX_TOKENS
         
@@ -278,18 +284,15 @@ class UnifiedLLMHandler:
                 if self._handle_rate_limit(instance_name, e):
                     continue  # Try next provider
                 else:
-                    # Non-rate-limit error, still try next provider but with a short delay
                     await asyncio.sleep(1)
                     continue
         
-        # If we get here, all providers failed
         raise Exception(f"All LLM provider instances failed. Last error: {last_error}")
     
     async def _generate_groq(self, instance: ProviderInstance, system_prompt: str, user_prompt: str,
                            temperature: float, max_tokens: int, reasoning_format: str = "hidden") -> str:
         """Generate text using Groq with reasoning format support."""
         
-        # Prepare the request parameters
         request_params = {
             "model": instance.model,
             "messages": [

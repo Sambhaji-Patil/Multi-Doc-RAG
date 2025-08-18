@@ -47,7 +47,7 @@ def verify_admin_token(credentials: HTTPAuthorizationCredentials = Depends(admin
 
 # Pydantic models for request/response
 class ProcessDocumentRequest(BaseModel):
-    documents: Union[HttpUrl, List[HttpUrl]]
+    documents: Union[str, List[str]]
     questions: List[str]
 
 class DocumentQuestionPair(BaseModel):
@@ -270,15 +270,17 @@ async def process_document(
                     if doc_info.content:
                         try:
                             if doc_info.status == "image":
-                                special_chunks_for_rag.append(extract_data_from_image(doc_info.content))
+                                content = extract_data_from_image(doc_info.content, doc_id=doc_id)
+                                special_chunks_for_rag.append(f"--- doc_id: {doc_id}, page number:{1}\n{content}")
                                 if os.path.exists(doc_info.content): os.unlink(doc_info.content)
                             elif doc_info.status == "oneshot":
-                                special_chunks_for_rag.extend(extract_data_from_image(doc_info.content))
+                                special_chunks_for_rag.extend(doc_info.content)
                             elif doc_info.status == "tabular":
                                 special_chunks_for_rag.extend([f"doc id: {doc_id}, page number: {d['page_num']}\n{d['content']}" for d in doc_info.content])
                             else:
                                 special_chunks_for_rag.append(str(doc_info.content))
                         except Exception as e:
+                            print(f"Error processing {doc_info.status} document: {str(e)}")
                             special_chunks_for_rag.append(f"Error processing {doc_info.status} document: {str(e)}")
         
         print(f"[{request_id}] Document processing complete: Regular={len(processed_doc_ids)}, Special={len(special_chunks_for_rag)}, Failed={failed_docs}")
@@ -290,7 +292,7 @@ async def process_document(
                 question_start = time.time()
                 print(f"❓ [{request_id}] Q{index+1}: {question[:50]}...")
                 answer, pipeline_timings = await rag_processor.answer_question(
-                    question=question, doc_id=processed_doc_ids, logger=rag_logger, request_id=request_id, extra_chunks=special_chunks_for_rag
+                    question=question, doc_ids=processed_doc_ids, logger=rag_logger, request_id=request_id, extra_chunks=special_chunks_for_rag
                 )
                 question_time = time.time() - question_start
                 rag_logger.log_question_timing(request_id, index, question, answer, question_time, pipeline_timings)

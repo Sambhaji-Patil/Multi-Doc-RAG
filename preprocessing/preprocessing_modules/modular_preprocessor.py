@@ -157,7 +157,6 @@ class ModularDocumentPreprocessor:
                 case 'xlsx':
                     content = extract_xlsx(temp_file_path)
                     self.special_content_cache[doc_id] = content
-                    self.metadata_manager.save_document_metadata([str(content)], doc_id, document_url)
                     return doc_id, "tabular"
                 
                 case 'csv':
@@ -169,7 +168,6 @@ class ModularDocumentPreprocessor:
 
                 case 'png' | 'jpeg' | 'jpg':
                     self.special_content_cache[doc_id] = temp_file_path
-                    self.metadata_manager.save_document_metadata([temp_file_path], doc_id, document_url)
                     # Note: The caller is responsible for not deleting the temp file if it's an image.
                     return doc_id, "image"
 

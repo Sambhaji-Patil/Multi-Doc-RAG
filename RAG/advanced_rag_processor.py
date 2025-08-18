@@ -114,13 +114,13 @@ class AdvancedRAGProcessor:
             self.provider_usage_stats[provider][stage] = 0
         self.provider_usage_stats[provider][stage] += 1
     
-    async def answer_question(self, question: str, doc_id:List[str], logger=None, request_id: str = None, extra_chunks = []) -> Tuple[str, Dict[str, float]]:
+    async def answer_question(self, question: str, doc_ids:List[str], logger=None, request_id: str = None, extra_chunks = []) -> Tuple[str, Dict[str, float]]:
         """
         Answer a question using advanced RAG techniques with detailed timing.
         
         Args:
             question: The question to answer
-            doc_id: Document ID to search in
+            doc_ids: Document ID to search in
             logger: Optional logger for tracking
             request_id: Optional request ID for logging
             
@@ -164,7 +164,7 @@ class AdvancedRAGProcessor:
             
             # Step 2: Hybrid Search with Fusion
             step_start = time.time()
-            search_results = await self.search_manager.hybrid_search(expanded_queries, doc_id, TOP_K)
+            search_results = await self.search_manager.hybrid_search(expanded_queries, doc_ids, TOP_K)
             search_time = time.time() - step_start
             timings['hybrid_search'] = search_time
             if logger and request_id:

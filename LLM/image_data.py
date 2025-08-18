@@ -1,4 +1,3 @@
-# pip install google-generativeai pillow requests
 import os, io, json, mimetypes, textwrap
 from typing import Union, Optional, Tuple
 import requests
@@ -10,8 +9,9 @@ if not APIKEY:
     APIKEY = os.getenv("GEMINI_API_KEY_1")
 
 genai.configure(api_key=APIKEY)
-model = genai.GenerativeModel("gemini-1.5-flash")
+model = genai.GenerativeModel("gemini-2.0-flash-lite")
 
+cache = {}
 
 def _read_image_and_mime(image: Union[str, bytes, io.BytesIO]) -> Tuple[bytes, str]:
     """
@@ -61,6 +61,7 @@ def _read_image_and_mime(image: Union[str, bytes, io.BytesIO]) -> Tuple[bytes, s
 
 def extract_data_from_image(
     image: Union[str, bytes, io.BytesIO],
+    doc_id = None,
     *,
     api_key: Optional[str] = None,
     temperature: float = 0.2,
@@ -92,65 +93,24 @@ def extract_data_from_image(
         A complete Markdown report suitable for saving or rendering directly.
     """
 
+    cached_data = cache.get(doc_id)
+    if cached_data:
+        return cached_data
+
     img_bytes, mime = _read_image_and_mime(image)
 
     system_prompt = textwrap.dedent("""
-        You are a meticulous vision data extractor. Analyze the image and output a single JSON object.
-        Be accurate. If a detail is unclear or not legible, write "unknown" or omit the field.
-        Do NOT add any text outside of the JSON. Do NOT wrap with code fences.
+You are an expert AI assistant for a robust RAG (Retrieval-Augmented Generation) system.
+Your task is to analyze the provided image and extract all relevant information in a structured format.
 
-        JSON schema (keys and semantics):
-        {
-          "overview": "1–3 sentences summarizing what the image contains and why it might matter.",
-          "text_blocks": [
-            {
-              "region": "short label like header/body/footer/annotation N",
-              "text": "verbatim text as read left-to-right, top-to-bottom"
-            }
-          ],
-          "tables": [
-            {
-              "title": "table caption or inferred title, or 'Table 1'",
-              "markdown": "GitHub-Flavored Markdown table with header row if present.",
-              "notes": "mention merged cells, footnotes, units, approximations"
-            }
-          ],
-          "charts": [
-            {
-              "title": "e.g., Sales by Quarter (2019–2024)",
-              "type": "bar | line | pie | scatter | heatmap | other",
-              "axes": {
-                "x": {"label": "string or 'unknown'", "units": "string or 'none'"},
-                "y": {"label": "string or 'unknown'", "units": "string or 'none'"}
-              },
-              "series": [
-                {"name": "series name or 'overall'", "trend": "one-sentence trend"}
-              ],
-              "key_points": [
-                "3–6 concise bullets with concrete values if legible"
-              ],
-              "approx_data": [
-                {"x": "value/category", "y": "numeric or 'unknown'", "series": "optional series name"}
-              ],
-              "explanation": "clear lay summary (4–8 sentences) of what the chart shows and why it matters"
-            }
-          ],
-          "other_visuals": [
-            {
-              "type": "diagram | map | UI | form | infographic | other",
-              "description": "what it depicts and how the parts relate",
-              "entities": ["list key labels/nodes/components"],
-              "relationships": ["brief relationships or flows"]
-            }
-          ],
-          "final_summary": "5–8 bullets: the most actionable insights across text/tables/charts."
-        }
+Based on the image content, please do the following:
 
-        Additional directives:
-        - Keep all tables in valid Markdown pipe-table format.
-        - Use consistent units; if inferring units, state that they are inferred.
-        - Prefer faithful extraction over guessing; do not invent numbers.
-        - For handwriting or blurry text, include best-effort text with a note.
+1.  **Identify the image type** (e.g., 'table', 'bar chart', 'line graph', 'photograph', 'diagram').
+2.  **Extract all text verbatim (OCR)** if any is present.
+3.  **If it is a table:** Convert the entire table into a clean, pipe-delimited Markdown format.
+4.  **If it is a chart or graph:** Do not just describe it. Summarize the key insights, trends, and main data points. For example, "The bar chart shows a 50% increase in Q4 sales compared to Q1."
+5.  **If it is a general photograph or diagram:** Provide a detailed caption describing what is shown.
+                        
     """)
 
     image_part = {"mime_type": mime, "data": img_bytes}
@@ -170,128 +130,5 @@ def extract_data_from_image(
     except Exception as e:
         # Don’t bury the lede—surface the exact error.
         return f"**Image Analysis Failed**\n\n> {e}\n\nCheck your API key/model name and that the image is accessible."
-
-    # Try reading strict JSON. If it fails, we return whatever the model sent.
-    data = None
-    try:
-        data = json.loads(raw)
-    except Exception:
-        # Fallback: the model might have returned near-JSON or text. Return as-is.
-        return f"## Image Analysis\n\n{raw.strip()}"
-
-    # Compose a clean Markdown report.
-    lines = []
-
-    def add(section_title: str):
-        lines.append(f"## {section_title}")
-
-    # Overview
-    if data.get("overview"):
-        add("Overview")
-        lines.append(data["overview"].strip())
-        lines.append("")
-
-    # Text blocks
-    text_blocks = data.get("text_blocks") or []
-    if text_blocks:
-        add("Text Data (OCR)")
-        for i, tb in enumerate(text_blocks, 1):
-            region = tb.get("region") or f"region {i}"
-            text = (tb.get("text") or "").strip()
-            if text:
-                lines.append(f"**{region}:**")
-                # Preserve line breaks but keep it tidy
-                lines.append("")
-                lines.append(text)
-                lines.append("")
-        lines.append("")
-
-    # Tables
-    tables = data.get("tables") or []
-    if tables:
-        add("Tables")
-        for i, t in enumerate(tables, 1):
-            title = t.get("title") or f"Table {i}"
-            markdown_tbl = (t.get("markdown") or "").strip()
-            notes = (t.get("notes") or "").strip()
-            lines.append(f"**{title}**")
-            lines.append("")
-            if markdown_tbl:
-                lines.append(markdown_tbl)
-                lines.append("")
-            if notes:
-                lines.append(f"_Notes:_ {notes}")
-                lines.append("")
-        lines.append("")
-
-    # Charts & Visuals
-    charts = data.get("charts") or []
-    if charts:
-        add("Charts & Visuals")
-        for c in charts:
-            title = c.get("title") or "Chart"
-            ctype = c.get("type") or "other"
-            lines.append(f"**{title}** — _{ctype}_")
-            axes = c.get("axes") or {}
-            x = axes.get("x") or {}
-            y = axes.get("y") or {}
-            lines.append(f"- **X-axis:** {x.get('label','unknown')} ({x.get('units','none')})")
-            lines.append(f"- **Y-axis:** {y.get('label','unknown')} ({y.get('units','none')})")
-            series = c.get("series") or []
-            if series:
-                lines.append("- **Series/Trends:**")
-                for s in series:
-                    nm = s.get("name") or "overall"
-                    tr = s.get("trend") or ""
-                    lines.append(f"  - {nm}: {tr}")
-            kps = c.get("key_points") or []
-            if kps:
-                lines.append("- **Key points:**")
-                for kp in kps:
-                    lines.append(f"  - {kp}")
-            approx = c.get("approx_data") or []
-            if approx:
-                lines.append("- **Approximate data (if legible):**")
-                for row in approx:
-                    xs = row.get("x")
-                    ys = row.get("y")
-                    ser = row.get("series")
-                    tag = f" [{ser}]" if ser else ""
-                    lines.append(f"  - {xs} → {ys}{tag}")
-            explain = c.get("explanation")
-            if explain:
-                lines.append("")
-                lines.append(explain.strip())
-            lines.append("")
-        lines.append("")
-
-    # Other visuals
-    others = data.get("other_visuals") or []
-    if others:
-        add("Other Visual Insights")
-        for o in others:
-            typ = o.get("type") or "other"
-            desc = o.get("description") or ""
-            ents = o.get("entities") or []
-            rels = o.get("relationships") or []
-            lines.append(f"- **{typ.capitalize()}:** {desc}")
-            if ents:
-                lines.append(f"  - Entities: {', '.join(ents)}")
-            if rels:
-                lines.append(f"  - Relationships: {', '.join(rels)}")
-        lines.append("")
-
-    # Final summary
-    if data.get("final_summary"):
-        add("Final Summary")
-        # If model returned multiple bullets as a single string, keep them as text.
-        lines.append(data["final_summary"].strip())
-        lines.append("")
-
-    markdown = "\n".join(lines).strip() or "No content extracted."
-    return markdown
-
-
-# --- Example usage ---
-# report = analyze_image_to_markdown("invoice_or_dashboard.png")
-# print(report)
+    cache[doc_id] = raw
+    return raw
