@@ -12,3 +12,4 @@ RAG/rag_embeddings/[a-z]*
 *test*
 docs
 examples
+logs
