@@ -3,12 +3,14 @@ Enhanced in-memory logging system for RAG API with detailed pipeline timing.
 Since HuggingFace doesn't allow persistent file storage, logs are stored in memory.
 """
 
-import json
 import time
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict, field
 import threading
+from logger.custom_logger import CustomLogger
+
+logger = CustomLogger().get_logger(__file__)
 
 @dataclass
 class PipelineTimings:
@@ -77,12 +79,11 @@ class RAGLogger:
                 'duration_seconds': round(duration, 4),
                 'timestamp': datetime.now().isoformat()
             }
-            print(f"⏱️  [{request_id}] {stage_name}: {duration:.4f}s")
+            logger.info("pipeline_stage", request_id=request_id, stage=stage_name, duration_sec=round(duration, 4))
     
     def log_question_timing(self, request_id: str, question_index: int, question: str, 
                            answer: str, duration: float, pipeline_timings: Dict[str, float]) -> None:
         """Log timing for individual question processing."""
-        print(pipeline_timings)
         if request_id in self._active_requests:
             question_timing = {
                 'question_index': question_index,
@@ -93,15 +94,16 @@ class RAGLogger:
                 'timestamp': datetime.now().isoformat()
             }
             self._active_requests[request_id]['question_timings'].append(question_timing)
-            
-            # Enhanced console logging
-            print(f"\n❓ [{request_id}] Question {question_index + 1}: {question[:60]}...")
-            print(f"   📊 Processing time: {duration:.4f}s")
-            if pipeline_timings:
-                breakdown_str = " | ".join([f"{k}: {v:.4f}s" for k, v in pipeline_timings.items() if v > 0])
-                if breakdown_str:
-                    print(f"   ⚙️  Pipeline breakdown: {breakdown_str}")
-            print(f"   💬 Answer length: {len(answer)} characters")
+            # Compact structured log
+            logger.info(
+                "question_timing",
+                request_id=request_id,
+                q_index=question_index + 1,
+                duration_sec=round(duration, 4),
+                answer_length=len(answer),
+                breakdown={k: round(v, 4) for k, v in pipeline_timings.items()},
+                preview=question[:60]
+            )
     
     def end_request_timing(self, request_id: str) -> Dict[str, Any]:
         """End timing for a request and return timing data."""
@@ -188,24 +190,17 @@ class RAGLogger:
         with self._lock:
             self.logs.append(log_entry)
         
-        # Enhanced console logging summary
-        print(f"\n📊 [{request_id}] REQUEST COMPLETED:")
-        print(f"   🕐 Duration: {processing_time:.2f}s")
-        print(f"   📄 Document: {document_url[:60]}...")
-        print(f"   ❓ Questions processed: {len(questions)}")
-        print(f"   ✅ Status: {status.upper()}")
-        
-        if pipeline_timings:
-            print(f"   ⚙️  Pipeline performance:")
-            for stage, data in pipeline_timings.items():
-                duration = data.get('duration_seconds', 0)
-                print(f"      • {stage.replace('_', ' ').title()}: {duration:.4f}s")
-        
-        if error_message:
-            print(f"   ❌ Error: {error_message}")
-        
-        print(f"   🆔 Request ID: {request_id}")
-        print("   " + "="*50)
+        # Structured log summary
+        logger.info(
+            "request_completed",
+            request_id=request_id,
+            duration_sec=round(processing_time, 2),
+            document=document_url,
+            questions=len(questions),
+            status=status,
+            error=error_message,
+            stages={k: v.get('duration_seconds', 0) for k, v in pipeline_timings.items()} if pipeline_timings else {},
+        )
         
         return request_id
     

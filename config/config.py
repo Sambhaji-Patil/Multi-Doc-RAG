@@ -51,6 +51,9 @@ API_PORT = 8000
 API_RELOAD = True
 
 
+CONSOLE_LOG_ENABLED = False
+
+
 sequence = ["primary", "secondary", "ternary", "quaternary", "quinary", "senary", "septenary", "octonary", "nonary", "denary"]
 
 

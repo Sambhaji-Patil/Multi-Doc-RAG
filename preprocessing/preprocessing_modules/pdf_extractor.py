@@ -57,7 +57,7 @@ class TextExtractor:
         if not pdf_path.exists():
             raise FileNotFoundError(f"PDF file not found: {pdf_path}")
         
-        self.logger.info(f"📖 Extracting text from PDF: {pdf_path.name}")
+        self.logger.info(f"Extracting text from PDF: {pdf_path.name}")
         
         # Choose extraction method based on backend
         if self.backend == "pymupdf" or (self.backend == "auto" and handle_cid):
@@ -316,7 +316,7 @@ class TextExtractor:
             
             doc.close()
             
-            self.logger.info(f"✅ Successfully processed {successful_pages}/{len(page_results)} pages, extracted {total_chars} characters with PyMuPDF")
+            self.logger.info(f"Successfully processed {successful_pages}/{len(page_results)} pages, extracted {total_chars} characters with PyMuPDF")
             
             if successful_pages == 0 and page_results:
                 raise Exception("No content could be extracted from any page. This might be a scanned document requiring OCR.")
@@ -454,7 +454,7 @@ class TextExtractor:
                     page_results = list(executor.map(extract_page_content, page_data))
             
             total_chars = sum(len(page['content']) for page in page_results)
-            self.logger.info(f"✅ Extracted {total_chars} characters from {len(page_results)} pages using pdfplumber.")
+            self.logger.info(f"Extracted {total_chars} characters from {len(page_results)} pages using pdfplumber.")
             return page_results
             
         except Exception as e:

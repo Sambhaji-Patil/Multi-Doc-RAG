@@ -14,6 +14,10 @@ from groq import Groq
 from config.config import get_provider_configs, MAX_TOKENS, TEMPERATURE
 
 from datetime import datetime
+from logger.custom_logger import CustomLogger
+
+# module logger
+logger = CustomLogger().get_logger(__file__)
 
 class ProviderType(Enum):
     """Enum for LLM provider types."""
@@ -58,8 +62,8 @@ class UnifiedLLMHandler:
         
         if not self.provider_instances:
             raise ValueError("No LLM providers could be initialized. Check your configuration.")
-        
-        print(f"✅ Initialized {len(self.provider_instances)} LLM provider instance(s)")
+
+        logger.info("Initialized LLM provider instances", count=len(self.provider_instances))
         self._print_provider_summary()
     
     def _init_providers(self):
@@ -96,10 +100,10 @@ class UnifiedLLMHandler:
             self.provider_status[instance_name] = ProviderStatus()
             self.provider_priority.append(instance_name)
             
-            print(f"✅ Initialized {instance_name}: {config['model']}")
+            logger.info("Initialized provider instance", instance=instance_name, model=config['model'])
             
         except Exception as e:
-            print(f"❌ Failed to initialize Groq instance '{config['name']}': {e}")
+            logger.error("Failed to initialize Groq instance", name=config['name'], error=str(e))
     
     def _init_gemini_instance(self, config: Dict[str, Any]):
         """Initialize a Gemini instance."""
@@ -125,10 +129,10 @@ class UnifiedLLMHandler:
             self.provider_status[instance_name] = ProviderStatus()
             self.provider_priority.append(instance_name)
             
-            print(f"✅ Initialized {instance_name}: {config['model']}")
+            logger.info("Initialized provider instance", instance=instance_name, model=config['model'])
             
         except Exception as e:
-            print(f"❌ Failed to initialize Gemini instance '{config['name']}': {e}")
+            logger.error("Failed to initialize Gemini instance", name=config['name'], error=str(e))
     
     def _init_openai_instance(self, config: Dict[str, Any]):
         """Initialize an OpenAI instance."""
@@ -150,21 +154,18 @@ class UnifiedLLMHandler:
             self.provider_status[instance_name] = ProviderStatus()
             self.provider_priority.append(instance_name)
             
-            print(f"✅ Initialized {instance_name}: {config['model']}")
+            logger.info("Initialized provider instance", instance=instance_name, model=config['model'])
             
         except Exception as e:
-            print(f"❌ Failed to initialize OpenAI instance '{config['name']}': {e}")
+            logger.error("Failed to initialize OpenAI instance", name=config['name'], error=str(e))
     
     def _print_provider_summary(self):
-        """Print a summary of initialized providers."""
+        """Log a summary of initialized providers once."""
         provider_counts = {}
         for instance in self.provider_instances.values():
             provider_type = instance.provider_type.value
             provider_counts[provider_type] = provider_counts.get(provider_type, 0) + 1
-        
-        print("📊 Provider Summary:")
-        for provider_type, count in provider_counts.items():
-            print(f"   {provider_type.upper()}: {count} instance(s)")
+        logger.info("Provider summary", summary=provider_counts, total=len(self.provider_instances))
     
     def _get_available_provider(self) -> Optional[str]:
         """Get the next available provider instance based on priority and cooldowns."""
@@ -181,7 +182,7 @@ class UnifiedLLMHandler:
             if not status.is_available and current_time >= status.cooldown_until:
                 status.is_available = True
                 status.error_count = 0
-                print(f"🔄 {instance_name} cooldown expired, marking as available")
+                logger.info("Instance cooldown expired", instance=instance_name)
             
             # Return first available provider
             if status.is_available:
@@ -204,8 +205,8 @@ class UnifiedLLMHandler:
             status.is_available = False
             status.cooldown_until = current_time + self.cooldown_duration
             status.error_count += 1
-            
-            print(f"⏳ {instance_name} hit rate limit. Cooldown until {time.strftime('%H:%M:%S', time.localtime(status.cooldown_until))}")
+
+            logger.warning("Instance hit rate limit", instance=instance_name, cooldown_until=time.strftime('%H:%M:%S', time.localtime(status.cooldown_until)))
             return True
         
         return False
@@ -231,8 +232,15 @@ class UnifiedLLMHandler:
             Dictionary with 'text', 'provider', 'instance', and 'model' keys
         """
         
-        with open(f"test/context/{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", 'w') as f:
-            f.write(user_prompt)
+        # Optional debug logging - create directory if it doesn't exist
+        try:
+            import os
+            os.makedirs("test/context", exist_ok=True)
+            with open(f"test/context/{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", 'w') as f:
+                f.write(user_prompt)
+        except Exception as e:
+            # Silently continue if debug logging fails
+            pass
 
         temp = temperature if temperature is not None else TEMPERATURE
         max_tok = max_tokens if max_tokens is not None else MAX_TOKENS
@@ -254,7 +262,7 @@ class UnifiedLLMHandler:
                 if available_times:
                     min_cooldown = min(available_times) - time.time()
                     if min_cooldown > 0:
-                        print(f"⏳ All providers on cooldown. Waiting {min_cooldown:.1f}s for next available...")
+                        logger.info("All providers on cooldown, waiting", wait_seconds=round(min_cooldown, 1))
                         await asyncio.sleep(min(min_cooldown, 5))  # Wait max 5 seconds
                         continue
                 break
@@ -262,7 +270,7 @@ class UnifiedLLMHandler:
             instance = self.provider_instances[instance_name]
             
             try:
-                print(f"🚀 Attempting generation with {instance_name} ({instance.model})")
+                logger.info("Attempting generation", instance=instance_name, model=instance.model)
                 
                 if instance.provider_type == ProviderType.GROQ:
                     result = await self._generate_groq(instance, system_prompt, user_prompt, temp, max_tok, reasoning_format)
@@ -277,7 +285,7 @@ class UnifiedLLMHandler:
                 return result, instance.provider_type.value, instance_name
                 
             except Exception as e:
-                print(f"❌ {instance_name} error: {e}")
+                logger.error("Provider instance error", instance=instance_name, error=str(e))
                 last_error = e
                 
                 # Handle rate limiting
@@ -310,7 +318,7 @@ class UnifiedLLMHandler:
         
         if any(model in instance.model.lower() for model in reasoning_models):
             request_params["reasoning_format"] = reasoning_format
-            print(f"🧠 Using reasoning format: {reasoning_format}")
+            logger.info("Using reasoning format", format=reasoning_format)
         
         response = await asyncio.to_thread(
             instance.client.chat.completions.create,
@@ -417,8 +425,7 @@ class UnifiedLLMHandler:
             status.is_available = True
             status.cooldown_until = 0.0
             status.error_count = 0
-        
-        print("🔄 All provider instance cooldowns reset")
+    logger.info("All provider instance cooldowns reset")
     
     def get_provider_info(self) -> Dict[str, Any]:
         """Get information about all configured provider instances."""

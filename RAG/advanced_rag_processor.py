@@ -5,7 +5,11 @@ Version: 3.1 - Updated for Enhanced LLM Handler with Provider Fallback
 """
 
 import time
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Optional
+from logger.custom_logger import CustomLogger
+
+# module logger (avoid name clash with function params)
+app_logger = CustomLogger().get_logger(__file__)
 from pathlib import Path
 
 # Import all modular components
@@ -30,12 +34,9 @@ class AdvancedRAGProcessor:
     def __init__(self):
         """Initialize the advanced RAG processor with all modules."""
         self.base_db_path = Path(OUTPUT_DIR)
-        
+
         # Initialize all managers
-        print("Initializing Advanced RAG Processor (Modular v3.1)...")
-        
-        # Core components initialization
-        from typing import Optional
+        app_logger.info("Initializing Advanced RAG Processor", version="3.1")
 
         # Initialize counters and references
         module_count = 0
@@ -43,67 +44,71 @@ class AdvancedRAGProcessor:
 
         # --- Embedding Manager ---
         try:
-            self.embedding_manager: Optional[EmbeddingManager] = EmbeddingManager()
+            self.embedding_manager = EmbeddingManager()
             module_count += 1
         except Exception as e:
             self.embedding_manager = None
-            print(f"🔴 Embedding Manager Failed: {e}")
+            app_logger.error("Embedding Manager failed to initialize", error=str(e))
 
         # --- Query Expansion Manager ---
         try:
-            self.query_expansion_manager: Optional[QueryExpansionManager] = QueryExpansionManager()
+            self.query_expansion_manager = QueryExpansionManager()
             module_count += 1
         except Exception as e:
             self.query_expansion_manager = None
-            print(f"🔴 Query Expansion Manager Failed: {e}")
+            app_logger.error("Query Expansion Manager failed to initialize", error=str(e))
 
         # --- Search Manager (depends on Embedding Manager) ---
         try:
             if self.embedding_manager:
-                self.search_manager: Optional[SearchManager] = SearchManager(self.embedding_manager)
+                self.search_manager = SearchManager(self.embedding_manager)
                 module_count += 1
             else:
                 self.search_manager = None
-                print("🔴 Search Manager Skipped: Embedding Manager not available")
+                app_logger.warning("Search Manager skipped because Embedding Manager not available")
         except Exception as e:
             self.search_manager = None
-            print(f"🔴 Search Manager Failed: {e}")
+            app_logger.error("Search Manager failed to initialize", error=str(e))
 
         # --- Reranking Manager ---
         try:
-            self.reranking_manager: Optional[RerankingManager] = RerankingManager()
+            self.reranking_manager = RerankingManager()
             module_count += 1
         except Exception as e:
             self.reranking_manager = None
-            print(f"🔴 Reranking Manager Failed: {e}")
+            app_logger.error("Reranking Manager failed to initialize", error=str(e))
 
         # --- Context Manager ---
         try:
-            self.context_manager: Optional[ContextManager] = ContextManager()
+            self.context_manager = ContextManager()
             module_count += 1
         except Exception as e:
             self.context_manager = None
-            print(f"🔴 Context Manager Failed: {e}")
+            app_logger.error("Context Manager failed to initialize", error=str(e))
 
         # --- Answer Generator ---
         try:
-            self.answer_generator: Optional[AnswerGenerator] = AnswerGenerator()
+            self.answer_generator = AnswerGenerator()
             module_count += 1
         except Exception as e:
             self.answer_generator = None
-            print(f"🔴 Answer Generator Failed: {e}")
+            app_logger.error("Answer Generator failed to initialize", error=str(e))
 
         # Keep reference to LLM handler for info
-        self.llm_handler = llm_handler if "llm_handler" in locals() else None
+        self.llm_handler = llm_handler
 
         # Track LLM provider usage for monitoring
         self.provider_usage_stats = {}
 
         # Summary message
         if module_count == total_modules:
-            print("📦 All modules loaded successfully")
+            app_logger.info("All modules loaded successfully")
+            print("🟢 All modules loaded succesfully!!")
         else:
-            print(f"⚠️ {total_modules - module_count} modules failed or were skipped during initialization!")
+            app_logger.warning(
+                "Some modules failed or were skipped during initialization",
+                skipped=total_modules - module_count,
+            )
 
     
     def _update_provider_stats(self, provider: str, stage: str):
@@ -152,11 +157,11 @@ class AdvancedRAGProcessor:
                 timings['query_expansion'] = expansion_time
                 if logger and request_id:
                     logger.log_pipeline_stage(request_id, "query_expansion", expansion_time)
-                
-                print(f"   🟢-> Query expansion completed using {expansion_provider}")
+
+                app_logger.info("Query expansion completed", provider=expansion_provider)
                 
             except Exception as e:
-                print(f"🔴-> Query expansion failed: {e}")
+                app_logger.error("Query expansion failed", error=str(e))
                 # Fallback to original query if expansion fails
                 expanded_queries = [question]
                 expansion_time = time.time() - step_start
@@ -194,11 +199,11 @@ class AdvancedRAGProcessor:
                 if logger and request_id:
                     logger.log_pipeline_stage(request_id, "reranking", rerank_time)
                 
-                print(f"   🟢-> Reranking completed using {rerank_provider}")
+                app_logger.info("Reranking completed", provider=rerank_provider)
 
                 
             except Exception as e:
-                print(f"🔴-> Reranking failed, using original search results: {e}")
+                app_logger.error("Reranking failed, using original search results", error=str(e))
                 reranked_results = search_results
                 rerank_time = time.time() - step_start
                 timings['reranking'] = rerank_time
@@ -210,7 +215,7 @@ class AdvancedRAGProcessor:
             timings['context_creation'] = context_time
             if logger and request_id:
                 logger.log_pipeline_stage(request_id, "context_creation", context_time)
-            print("Context Creted")
+            app_logger.info("Context created")
             # Step 5: Enhanced Answer Generation
             step_start = time.time()
             try:
@@ -224,10 +229,10 @@ class AdvancedRAGProcessor:
                 if logger and request_id:
                     logger.log_pipeline_stage(request_id, "llm_generation", generation_time)
                 
-                print(f"🟢-> Answer generation completed using {generation_provider}-{instance}")
+                app_logger.info("Answer generation completed", provider=generation_provider, instance=instance)
                 
             except Exception as e:
-                print(f"🔴-> Answer generation failed: {e}")
+                app_logger.error("Answer generation failed", error=str(e))
                 answer = f"I encountered an error while generating the answer: {str(e)}"
                 generation_time = time.time() - step_start
                 timings['llm_generation'] = generation_time
@@ -236,13 +241,7 @@ class AdvancedRAGProcessor:
             total_time = time.time() - overall_start
             timings['total_pipeline'] = total_time
 
-            print(f"\n✅ Advanced RAG processing completed in {total_time:.4f}s")
-            print(f"   🔍 Query expansion: {expansion_time:.4f}s")
-            print(f"   🔎 Hybrid search: {search_time:.4f}s") 
-            print(f"   🎯 Reranking: {rerank_time:.4f}s")
-            print(f"   📝 Context creation: {context_time:.4f}s")
-            print(f"   💬 LLM generation: {generation_time:.4f}s")
-            print(f"   🤖 Providers used: {', '.join(providers_used)}")
+            app_logger.info("Advanced RAG processing completed", total_time=total_time, timings=timings, providers=providers_used)
 
             return answer, timings
             
@@ -250,83 +249,82 @@ class AdvancedRAGProcessor:
             error_time = time.time() - overall_start
             timings['error_time'] = error_time
             timings['providers_used'] = providers_used
-            print(f"🔴-> Error in advanced RAG processing: {str(e)}")
-            raise e.with_traceback
-            return f"I encountered an error while processing your question: {str(e)}", timings
+            app_logger.error("Error in advanced RAG processing", error=str(e))
+            raise
     
-    def get_provider_usage_stats(self) -> Dict:
-        """Get statistics about LLM provider usage across all stages."""
-        return {
-            "usage_by_provider": self.provider_usage_stats.copy(),
-            "current_provider_status": self.llm_handler.get_provider_status(),
-            "provider_info": self.llm_handler.get_provider_info()
-        }
-    
-    def reset_provider_stats(self):
-        """Reset provider usage statistics."""
-        self.provider_usage_stats = {}
-        print("📊 Provider usage statistics reset")
-    
-    def force_reset_llm_cooldowns(self):
-        """Force reset all LLM provider cooldowns (emergency use)."""
-        self.llm_handler.reset_cooldowns()
-        print("🔄 LLM provider cooldowns forcefully reset")
-    
-    def cleanup(self):
-        """Cleanup all manager resources."""
-        print("🧹 Cleaning up Advanced RAG processor resources...")
-        
-        # Cleanup search manager (which has the most resources)
-        self.search_manager.cleanup()
-        
-        print("🟢-> Advanced RAG cleanup completed")
-    
-    def get_system_info(self) -> Dict:
-        """Get comprehensive information about the RAG system."""
-        llm_info = self.llm_handler.get_provider_info()
-        
-        return {
-            "version": "3.1 - Enhanced LLM Handler Support",
-            "modules": [
-                "QueryExpansionManager",
-                "EmbeddingManager", 
-                "SearchManager",
-                "RerankingManager",
-                "ContextManager",
-                "AnswerGenerator"
-            ],
-            "base_db_path": str(self.base_db_path),
-            "llm_system": {
-                "available_providers": [p.name for p in llm_info.get("available_providers", [])],
-                "provider_priority": llm_info.get("provider_priority", []),
-                "cooldown_duration": llm_info.get("cooldown_duration_seconds", 0),
-                "current_status": self.llm_handler.get_provider_status()
-            },
-            "provider_usage_stats": self.provider_usage_stats,
-            "settings": {
-                "max_tokens": llm_info.get("max_tokens", "unknown"),
-                "temperature": llm_info.get("temperature", "unknown"),
-                "top_k": TOP_K
-            }
-        }
-    
-    def get_health_status(self) -> Dict:
-        """Get health status of all components."""
-        try:
-            provider_status = self.llm_handler.get_provider_status()
-            available_providers = sum(1 for status in provider_status.values() if status.get('available', False))
-            
+        def get_provider_usage_stats(self) -> Dict:
+            """Get statistics about LLM provider usage across all stages."""
             return {
-                "status": "healthy" if available_providers > 0 else "degraded",
-                "available_llm_providers": available_providers,
-                "total_llm_providers": len(provider_status),
-                "provider_details": provider_status,
-                "modules_loaded": 6,  # Number of RAG modules
-                "last_check": time.time()
+                "usage_by_provider": self.provider_usage_stats.copy(),
+                "current_provider_status": self.llm_handler.get_provider_status(),
+                "provider_info": self.llm_handler.get_provider_info(),
             }
-        except Exception as e:
+
+        def reset_provider_stats(self):
+            """Reset provider usage statistics."""
+            self.provider_usage_stats = {}
+            app_logger.info("Provider usage statistics reset")
+
+        def force_reset_llm_cooldowns(self):
+            """Force reset all LLM provider cooldowns (emergency use)."""
+            self.llm_handler.reset_cooldowns()
+            app_logger.info("LLM provider cooldowns forcefully reset")
+
+        def cleanup(self):
+            """Cleanup all manager resources."""
+            app_logger.info("Cleaning up Advanced RAG processor resources")
+
+            # Cleanup search manager (which has the most resources)
+            self.search_manager.cleanup()
+
+            app_logger.info("Advanced RAG cleanup completed")
+
+        def get_system_info(self) -> Dict:
+            """Get comprehensive information about the RAG system."""
+            llm_info = self.llm_handler.get_provider_info()
+
             return {
-                "status": "error",
-                "error": str(e),
-                "last_check": time.time()
+                "version": "3.1 - Enhanced LLM Handler Support",
+                "modules": [
+                    "QueryExpansionManager",
+                    "EmbeddingManager",
+                    "SearchManager",
+                    "RerankingManager",
+                    "ContextManager",
+                    "AnswerGenerator",
+                ],
+                "base_db_path": str(self.base_db_path),
+                "llm_system": {
+                    "available_providers": [p.name for p in llm_info.get("available_providers", [])],
+                    "provider_priority": llm_info.get("provider_priority", []),
+                    "cooldown_duration": llm_info.get("cooldown_duration_seconds", 0),
+                    "current_status": self.llm_handler.get_provider_status(),
+                },
+                "provider_usage_stats": self.provider_usage_stats,
+                "settings": {
+                    "max_tokens": llm_info.get("max_tokens", "unknown"),
+                    "temperature": llm_info.get("temperature", "unknown"),
+                    "top_k": TOP_K,
+                },
             }
+
+        def get_health_status(self) -> Dict:
+            """Get health status of all components."""
+            try:
+                provider_status = self.llm_handler.get_provider_status()
+                available_providers = sum(1 for status in provider_status.values() if status.get('available', False))
+
+                return {
+                    "status": "healthy" if available_providers > 0 else "degraded",
+                    "available_llm_providers": available_providers,
+                    "total_llm_providers": len(provider_status),
+                    "provider_details": provider_status,
+                    "modules_loaded": 6,  # Number of RAG modules
+                    "last_check": time.time(),
+                }
+            except Exception as e:
+                return {
+                    "status": "error",
+                    "error": str(e),
+                    "last_check": time.time(),
+                }

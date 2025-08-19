@@ -8,12 +8,17 @@ import time
 from typing import List
 from LLM.lite_llm import generate_lite
 from config.config import ENABLE_QUERY_EXPANSION, QUERY_EXPANSION_COUNT
+from logger.custom_logger import CustomLogger
+
+# module-level logger
+logger = CustomLogger().get_logger(__file__)
 
 class QueryExpansionManager:
     """Manages query expansion for better information retrieval."""
     
     def __init__(self):
-        print("🟢-> Query Expansion Manager initialized")
+        self.answer_count = 0
+        logger.info("Query Expansion Manager initialized", status="initialized")
     
     async def expand_query(self, original_query: str) -> List[str]:
         """Break complex queries into focused parts for better information retrieval."""
@@ -81,12 +86,15 @@ subquery2 (if exists)
             expanded_queries.reverse()
             final_queries = expanded_queries[:QUERY_EXPANSION_COUNT]
             
-            print(f"🟢-> Query broken down from 1 complex question to {len(final_queries)} focused sub-queries")
+            logger.info("Query expanded", original_query=original_query, sub_queries=len(final_queries))
+            self.answer_count += 1
+            print(f"🟢 Query {self.answer_count} Expansion successful")
             for i, q in enumerate(final_queries):
-                print(f"   Sub-query {i+1}: {q[:80]}...")
+                logger.info("Expanded sub-query", index=i+1, query=q[:200])
             
             return final_queries
             
         except Exception as e:
-            print(f"🔴-> Query expansion failed: {e}")
+            logger.error("Query expansion failed", error=str(e))
+            print("🔴 Query Expansion Failed!!")
             return [original_query]

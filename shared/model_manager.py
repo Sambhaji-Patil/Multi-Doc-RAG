@@ -1,3 +1,9 @@
+from sentence_transformers import SentenceTransformer
+from config.config import EMBEDDING_MODEL
+from logger.custom_logger import CustomLogger
+
+# module-level logger
+logger = CustomLogger().get_logger(__file__)
 """
 Shared Model Manager - Singleton Pattern
 Ensures only one instance of embedding model is loaded in memory.
@@ -30,12 +36,13 @@ class SharedModelManager:
         if self._model is None:
             with self._model_lock:
                 if self._model is None:
-                    print(f"🔄 Loading shared embedding model: {EMBEDDING_MODEL}")
+                    logger.info("Loading shared embedding model", filename=EMBEDDING_MODEL)
                     self._model = SentenceTransformer(
                         EMBEDDING_MODEL, 
                         cache_folder=".cache"
                     )
-                    print(f"🟢 Shared embedding model loaded successfully")
+                    logger.info("Shared embedding model loaded successfully", status="loaded")
+                    print("🟢 Shared embedding model loaded successfully")
         return self._model
     
     def get_embedding_dimension(self) -> int:

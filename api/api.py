@@ -22,10 +22,12 @@ import config.config as config
 from LLM.tabular_answer import get_answer_for_tabluar
 from LLM.image_answerer import get_answer_for_image
 from LLM.one_shotter import get_oneshot_answer
+from logger.custom_logger import CustomLogger
 
 # Initialize security
 security = HTTPBearer()
 admin_security = HTTPBearer()
+logger = CustomLogger().get_logger(__file__)
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Verify the bearer token for main API."""
@@ -109,15 +111,17 @@ document_preprocessor: Optional[DocumentPreprocessor] = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global rag_processor, document_preprocessor
-    print("Initializing Advanced RAG System...")
+    logger.info("Initializing Advanced RAG System")
     rag_processor = AdvancedRAGProcessor()
     document_preprocessor = DocumentPreprocessor()
-    print("Advanced RAG System initialized successfully")
+    logger.info("Advanced RAG System initialized successfully")
+    print("🟢 Advanced RAG System initialized successfully")
     yield
-    print("Shutting down RAG System...")
+    logger.info("Shutting down RAG System")
     if rag_processor:
         rag_processor.cleanup()
-    print("Cleanup completed")
+    logger.info("Cleanup completed")
+    print("🟢 Cleanup completed")
 
 app = FastAPI(
     title="Advanced RAG API",
@@ -154,7 +158,8 @@ async def process_document(
     final_answers = []
     
     try:
-        print(f"[{request_id}] Processing {len(document_urls)} document(s)...")
+        logger.info("Processing documents", request_id=request_id, count=len(document_urls))
+        print(f"🟢 Processing Documents: Req.Id: {request_id} Count: {len(document_urls)}")
 
         async def process_single_document(doc_url: str, index: int) -> tuple[str, DocumentInfo]:
             doc_start_time = time.time()
@@ -162,7 +167,8 @@ async def process_document(
             
             try:
                 if document_preprocessor.is_document_processed(doc_url):
-                    print(f"[{request_id}] ✅ Doc {index+1}: Using cached data for {doc_id}")
+                    logger.info("Using cached document", request_id=request_id, doc_index=index+1, doc_id=doc_id)
+                    print("🟢 Using cached Document")
                     doc_info_data = document_preprocessor.get_document_info(doc_url)
                     processing_time = time.time() - doc_start_time
                     return doc_id, DocumentInfo(
@@ -172,8 +178,8 @@ async def process_document(
                         status="cached",
                         processing_time=processing_time
                     )
-
-                print(f"[{request_id}] 🔄 Doc {index+1}: Processing new document {doc_id}")
+                logger.info("Processing new document", request_id=request_id, doc_index=index+1, doc_id=doc_id)
+                print(f"🟢 Processing new document: Doc.Id:{doc_id} ")
                 
                 ## MODIFIED: Unpack the (doc_id, doc_type) tuple from the preprocessor
                 processed_doc_id, doc_type = await document_preprocessor.process_document(doc_url, skip_length_check=is_multi_document)
@@ -186,8 +192,7 @@ async def process_document(
                 content = None
                 if doc_type in ["image", "tabular", "oneshot"]:
                     content = document_preprocessor.get_special_document_details(processed_doc_id)
-                
-                print(f"[{request_id}] ✅ Doc {index+1}: Processed as '{doc_type}' ({doc_info_data.get('chunk_count', 0)} chunks)")
+                logger.info("Document processed", request_id=request_id, doc_index=index+1, doc_id=processed_doc_id, doc_type=doc_type, chunks=doc_info_data.get('chunk_count', 0))
                 return processed_doc_id, DocumentInfo(
                     document_url=doc_url,
                     doc_id=processed_doc_id,
@@ -200,7 +205,7 @@ async def process_document(
             except Exception as e:
                 processing_time = time.time() - doc_start_time
                 error_msg = str(e)
-                print(f"[{request_id}] ❌ Doc {index+1}: Failed to process {doc_url}: {error_msg}")
+                logger.error("Failed to process document", request_id=request_id, doc_index=index+1, document_url=doc_url, error=error_msg)
                 return None, DocumentInfo(
                     document_url=doc_url,
                     doc_id=doc_id,
@@ -228,7 +233,8 @@ async def process_document(
                 return ProcessDocumentResponse(answers=[doc_id]*len(questions))
 
             if doc_info.status in ["image", "tabular", "oneshot"]:
-                print(f"[{request_id}] Handling single special document of type '{doc_info.status}'")
+                logger.info("Handling single special document", request_id=request_id, doc_type=doc_info.status)
+                print(f"🟢 Handling single special document {doc_info.status} ")
                 try:
                     if doc_info.status == "image":
                         final_answers = get_answer_for_image(doc_info.content, questions)
@@ -249,7 +255,7 @@ async def process_document(
                 finally:
                     if doc_info.status == "image" and doc_info.content and os.path.exists(doc_info.content):
                         os.unlink(doc_info.content)
-                        print(f"🗑️ Cleaned up image file: {doc_info.content}")
+                        logger.info("Cleaned up image file", path=doc_info.content)
         
         special_chunks_for_rag = []
         for i, result in enumerate(doc_results):
@@ -280,23 +286,25 @@ async def process_document(
                             else:
                                 special_chunks_for_rag.append(str(doc_info.content))
                         except Exception as e:
-                            print(f"Error processing {doc_info.status} document: {str(e)}")
+                            logger.error("Error processing special document", doc_type=doc_info.status, error=str(e))
                             special_chunks_for_rag.append(f"Error processing {doc_info.status} document: {str(e)}")
         
-        print(f"[{request_id}] Document processing complete: Regular={len(processed_doc_ids)}, Special={len(special_chunks_for_rag)}, Failed={failed_docs}")
+        logger.info("Document processing complete", request_id=request_id, regular=len(processed_doc_ids), special=len(special_chunks_for_rag), failed=failed_docs)
+        print("🟢 Document Processing completed")
         
         if processed_doc_ids or special_chunks_for_rag:
-            print(f"🚀 [{request_id}] Processing {len(questions)} questions...")
+            logger.info("Processing questions", request_id=request_id, count=len(questions))
+            print("🟢 Processing Questions...")
             
             async def answer_single_question(question: str, index: int):
                 question_start = time.time()
-                print(f"❓ [{request_id}] Q{index+1}: {question[:50]}...")
+                logger.info("Processing question", request_id=request_id, q_index=index+1, preview=question[:50])
                 answer, pipeline_timings = await rag_processor.answer_question(
                     question=question, doc_ids=processed_doc_ids, logger=rag_logger, request_id=request_id, extra_chunks=special_chunks_for_rag
                 )
                 question_time = time.time() - question_start
                 rag_logger.log_question_timing(request_id, index, question, answer, question_time, pipeline_timings)
-                print(f"✅ [{request_id}] Q{index+1} completed in {question_time:.4f}s")
+                logger.info("Question completed", request_id=request_id, q_index=index+1, duration_sec=round(question_time, 4))
                 return answer, pipeline_timings
             
             semaphore = asyncio.Semaphore(5)
@@ -310,20 +318,21 @@ async def process_document(
             final_answers = rag_answers
     
     except Exception as e:
-        print(f"❌ [{request_id}] Error processing request: {str(e)}")
+        logger.error("Error processing request", request_id=request_id, error=str(e))
+        print("🔴 Error processing request!!")
         if not final_answers: final_answers = [f"Error: {str(e)}" for _ in questions]
         raise
     
     finally:
         timing_data = rag_logger.end_request_timing(request_id)
         processing_time = time.time() - start_time
-        rag_logger.log_request(
+    rag_logger.log_request(
             document_url=document_urls[0] if len(document_urls) == 1 else f"multi_doc_{len(document_urls)}",
             questions=questions, answers=final_answers, processing_time=processing_time, status="success", error_message=None,
             document_id=processed_doc_ids[0] if len(processed_doc_ids) == 1 else f"multi_{len(processed_doc_ids)}",
             was_preprocessed=any(doc.status == "cached" for doc in documents_info), timing_data=timing_data
         )
-        print(f"📊 Request logged with ID: {request_id} (Time: {processing_time:.2f}s)")
+    logger.info("Request logged", request_id=request_id, duration_sec=round(processing_time, 2))
     
     return ProcessDocumentResponse(answers=final_answers)
 
@@ -352,7 +361,7 @@ async def preprocess_document(document_url: str, force: bool = False, token: str
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to preprocess document: {str(e)}")
 
-# (The admin and logging endpoints below do not need changes as they don't call process_document)
+
 @app.get("/collections")
 async def list_collections(token: str = Depends(verify_admin_token)):
     global document_preprocessor

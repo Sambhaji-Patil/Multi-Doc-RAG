@@ -6,6 +6,10 @@ Handles context creation and management for LLM generation.
 from typing import List, Dict
 from collections import defaultdict
 from config.config import MAX_CONTEXT_LENGTH
+from logger.custom_logger import CustomLogger
+
+# module-level logger
+logger = CustomLogger().get_logger(__file__)
 
 
 class ContextManager:
@@ -13,7 +17,7 @@ class ContextManager:
     
     def __init__(self):
         """Initialize the context manager."""
-        print("🟢-> Context Manager initialized")
+        logger.info("Context Manager initialized", status="initialized")
     
     def create_enhanced_context(self, question: str, results: List[Dict], max_length: int = MAX_CONTEXT_LENGTH, extra_chunks: List[str] = []) -> str:
         """Create enhanced context ensuring each query contributes equally."""
@@ -44,43 +48,43 @@ class ContextManager:
         chunks_per_query = len(results) // num_queries if num_queries > 0 else 0
         num_extra_chunks = len(results) % num_queries if num_queries > 0 else 0
         
-        print(f"📊 Context Creation: {num_queries} queries, {chunks_per_query} chunks per query (+{num_extra_chunks} extra)")
+        logger.info("Context creation start", queries=num_queries, chunks_per_query=chunks_per_query, extra=num_extra_chunks)
         try:
             for q_idx in sorted(query_to_chunks.keys()):
                 query_chunk_limit = chunks_per_query + (1 if q_idx < num_extra_chunks else 0)
                 query_chunks_added = 0
-                
-                print(f"   Query {q_idx+1}: Adding up to {query_chunk_limit} chunks")
-                
+
+                logger.info("Adding chunks for query", query_index=q_idx+1, limit=query_chunk_limit)
+
                 for i, result in query_to_chunks[q_idx]:
                     if i not in added_chunks and query_chunks_added < query_chunk_limit:
                         text = result['payload'].get('text', '')
                         doc_id = result['payload'].get('doc_id', '')
                         doc_text = f"\n---\n{text}\n"
-                        
+
                         if current_length + len(doc_text) > max_length:
-                            print(f"   🔴-> Context length limit reached at {current_length} chars")
+                            logger.warning("Context length limit reached", current_length=current_length)
                             break 
                         context_parts.append(doc_text)
                         current_length += len(doc_text)
                         added_chunks.add(i)
                         query_chunks_added += 1
-                
-                
-                print(f"   Query {q_idx+1}: Added {query_chunks_added} chunks")
-        
+
+                logger.info("Query chunks added", query_index=q_idx+1, added=query_chunks_added)
+
         except Exception as e:
-            print(e)
-        
+            logger.error("Error during context creation", error=str(e))
+
         if extra_chunks:
-            print(f"   ➕ Adding {len(extra_chunks)} manually provided extra chunks.")
+            logger.info("Adding extra chunks", extra_chunks=len(extra_chunks))
+            print("🟢 Adding Extra Chunks...")
             for chunk in extra_chunks:
                 extra_doc_text = f"\n---\ncontent: {chunk}\n"
                 if current_length + len(extra_doc_text) > max_length:
-                    print(f"   🔴-> Context length limit reached while adding extra chunks.")
+                    logger.warning("Context length limit reached while adding extra chunks.")
                     break
                 context_parts.append(extra_doc_text)
                 current_length += len(extra_doc_text)
 
-        print(f"📝 Final context: {len(added_chunks)} chunks, {current_length} chars")
+        logger.info("Final context built", chunks=len(added_chunks), chars=current_length)
         return "\n".join(context_parts)
