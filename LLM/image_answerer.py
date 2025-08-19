@@ -55,6 +55,7 @@ def get_answer_for_image(image_source: str, questions: List[str], retries: int =
             raw_text = response.text.strip()
             answers = extract_ordered_answers(raw_text, len(questions))
             if len(answers) == len(questions):
+                print("🟢 Image answerer is successful ")
                 return answers
         except Exception as e:
             if attempt == retries - 1:

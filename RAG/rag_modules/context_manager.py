@@ -77,6 +77,7 @@ class ContextManager:
 
         if extra_chunks:
             logger.info("Adding extra chunks", extra_chunks=len(extra_chunks))
+            print("🟢 Adding Extra Chunks...")
             for chunk in extra_chunks:
                 extra_doc_text = f"\n---\ncontent: {chunk}\n"
                 if current_length + len(extra_doc_text) > max_length:

@@ -181,6 +181,7 @@ class FileDownloader:
                                     logger.info("Download progress", percent=round(progress, 1), downloaded_mb=round(downloaded / (1024*1024), 1))
 
                         logger.info("File downloaded successfully", cache_path=final_cache_path)
+                        print("🟢 File Downloaded successfully")
                         return final_cache_path, final_ext.lstrip('.')
 
                 except asyncio.TimeoutError:

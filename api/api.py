@@ -115,11 +115,13 @@ async def lifespan(app: FastAPI):
     rag_processor = AdvancedRAGProcessor()
     document_preprocessor = DocumentPreprocessor()
     logger.info("Advanced RAG System initialized successfully")
+    print("🟢 Advanced RAG System initialized successfully")
     yield
     logger.info("Shutting down RAG System")
     if rag_processor:
         rag_processor.cleanup()
     logger.info("Cleanup completed")
+    print("🟢 Cleanup completed")
 
 app = FastAPI(
     title="Advanced RAG API",
@@ -157,6 +159,7 @@ async def process_document(
     
     try:
         logger.info("Processing documents", request_id=request_id, count=len(document_urls))
+        print(f"🟢 Processing Documents: Req.Id: {request_id} Count: {len(document_urls)}")
 
         async def process_single_document(doc_url: str, index: int) -> tuple[str, DocumentInfo]:
             doc_start_time = time.time()
@@ -165,6 +168,7 @@ async def process_document(
             try:
                 if document_preprocessor.is_document_processed(doc_url):
                     logger.info("Using cached document", request_id=request_id, doc_index=index+1, doc_id=doc_id)
+                    print("🟢 Using cached Document")
                     doc_info_data = document_preprocessor.get_document_info(doc_url)
                     processing_time = time.time() - doc_start_time
                     return doc_id, DocumentInfo(
@@ -175,6 +179,7 @@ async def process_document(
                         processing_time=processing_time
                     )
                 logger.info("Processing new document", request_id=request_id, doc_index=index+1, doc_id=doc_id)
+                print(f"🟢 Processing new document: Doc.Id:{doc_id} ")
                 
                 ## MODIFIED: Unpack the (doc_id, doc_type) tuple from the preprocessor
                 processed_doc_id, doc_type = await document_preprocessor.process_document(doc_url, skip_length_check=is_multi_document)
@@ -229,6 +234,7 @@ async def process_document(
 
             if doc_info.status in ["image", "tabular", "oneshot"]:
                 logger.info("Handling single special document", request_id=request_id, doc_type=doc_info.status)
+                print(f"🟢 Handling single special document {doc_info.status} ")
                 try:
                     if doc_info.status == "image":
                         final_answers = get_answer_for_image(doc_info.content, questions)
@@ -284,9 +290,11 @@ async def process_document(
                             special_chunks_for_rag.append(f"Error processing {doc_info.status} document: {str(e)}")
         
         logger.info("Document processing complete", request_id=request_id, regular=len(processed_doc_ids), special=len(special_chunks_for_rag), failed=failed_docs)
+        print("🟢 Document Processing completed")
         
         if processed_doc_ids or special_chunks_for_rag:
             logger.info("Processing questions", request_id=request_id, count=len(questions))
+            print("🟢 Processing Questions...")
             
             async def answer_single_question(question: str, index: int):
                 question_start = time.time()
@@ -311,6 +319,7 @@ async def process_document(
     
     except Exception as e:
         logger.error("Error processing request", request_id=request_id, error=str(e))
+        print("🔴 Error processing request!!")
         if not final_answers: final_answers = [f"Error: {str(e)}" for _ in questions]
         raise
     
@@ -352,7 +361,7 @@ async def preprocess_document(document_url: str, force: bool = False, token: str
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to preprocess document: {str(e)}")
 
-# (The admin and logging endpoints below do not need changes as they don't call process_document)
+
 @app.get("/collections")
 async def list_collections(token: str = Depends(verify_admin_token)):
     global document_preprocessor

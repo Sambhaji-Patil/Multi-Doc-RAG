@@ -17,6 +17,7 @@ class QueryExpansionManager:
     """Manages query expansion for better information retrieval."""
     
     def __init__(self):
+        self.answer_count = 0
         logger.info("Query Expansion Manager initialized", status="initialized")
     
     async def expand_query(self, original_query: str) -> List[str]:
@@ -86,6 +87,8 @@ subquery2 (if exists)
             final_queries = expanded_queries[:QUERY_EXPANSION_COUNT]
             
             logger.info("Query expanded", original_query=original_query, sub_queries=len(final_queries))
+            self.answer_count += 1
+            print(f"🟢 Query {self.answer_count} Expansion successful")
             for i, q in enumerate(final_queries):
                 logger.info("Expanded sub-query", index=i+1, query=q[:200])
             
@@ -93,4 +96,5 @@ subquery2 (if exists)
             
         except Exception as e:
             logger.error("Query expansion failed", error=str(e))
+            print("🔴 Query Expansion Failed!!")
             return [original_query]

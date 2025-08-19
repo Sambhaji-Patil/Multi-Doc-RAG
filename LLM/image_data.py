@@ -131,4 +131,5 @@ Based on the image content, please do the following:
         # Don’t bury the lede—surface the exact error.
         return f"**Image Analysis Failed**\n\n> {e}\n\nCheck your API key/model name and that the image is accessible."
     cache[doc_id] = raw
+    print("🟢 Image data extracted!!")
     return raw

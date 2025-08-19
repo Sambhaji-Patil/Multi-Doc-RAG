@@ -85,6 +85,7 @@ class CustomLogger:
         # Create a single shared, timestamped log file the first time
         if CustomLogger._shared_log_file_path is None:
             log_file = f"{datetime.now().strftime('%m_%d_%Y_%H_%M_%S')}.log"
+            print(f"🟢 Logs will be saved at {log_file}")
             CustomLogger._shared_log_file_path = os.path.join(self.logs_dir, log_file)
         self.log_file_path = CustomLogger._shared_log_file_path
 
@@ -134,8 +135,3 @@ class CustomLogger:
         return MultiLogger(json_logger, self._console_logger, self._console_enabled)
 
 
-# --- Usage Example ---
-# if __name__ == "__main__":
-#     logger = CustomLogger().get_logger(__file__)
-#     logger.info("User uploaded a file", user_id=123, filename="report.pdf")
-#     logger.error("Failed to process PDF", error="File not found", user_id=123)

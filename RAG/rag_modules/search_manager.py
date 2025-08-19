@@ -29,6 +29,7 @@ class SearchManager:
     
     def __init__(self, embedding_manager, collection_name: str = "unified_documents"):
         """Initialize the search manager."""
+        self.answer_count = 0
         self.embedding_manager = embedding_manager
         self.collection_name = collection_name
         self.base_db_path = Path(OUTPUT_DIR)
@@ -277,7 +278,8 @@ class SearchManager:
         
         # ... (Logging logic remains the same) ...
         logger.info("Multi-document hybrid search completed", results=len(hybrid_results))
-        # ...
+        self.answer_count += 1
+        print(f"🟢 Multi-doc Q{self.answer_count} Hybrid search successful")
 
         return hybrid_results
     

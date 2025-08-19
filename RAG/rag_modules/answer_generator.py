@@ -21,6 +21,7 @@ class AnswerGenerator:
     def __init__(self):
         """Initialize the answer generator."""
         self.llm_handler = llm_handler
+        self.answer_count = 0  # Counter for generated answers
     logger.info("Answer Generator initialized")
     
     async def generate_enhanced_answer(self, original_question: str, context: str, expanded_queries: List[str]) -> str:
@@ -113,7 +114,8 @@ Provide a comprehensive answer based on the document excerpts above:"""
                 temperature=TEMPERATURE,
                 max_tokens=MAX_TOKENS
             )
-            
+            self.answer_count += 1
+            print(f"🟢 Answer {self.answer_count} generated successfully")
             return answer.strip(), provider, instance
             
         except Exception as e:

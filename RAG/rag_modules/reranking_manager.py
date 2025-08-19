@@ -63,8 +63,10 @@ class RerankingManager:
             )
 
             logger.info("Reranked results", count=len(search_results))
+            print("🟢 Reranking successful")
             return reranked_results[:RERANK_TOP_K - reserved]
 
         except Exception as e:
             logger.error("Reranking failed", error=str(e))
+            print("🔴 Reranking Failed!!")
             return search_results[:RERANK_TOP_K]

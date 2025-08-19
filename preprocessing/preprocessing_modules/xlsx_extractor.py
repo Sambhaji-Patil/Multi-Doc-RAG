@@ -83,8 +83,3 @@ def extract_xlsx(xlsx_path: str, tesseract_cmd: str = None) -> List[Dict[str, An
         processed_sheets.append(sheet_dict)
 
     return processed_sheets
-
-# if __name__ == "__main__":
-    
-#     logger.info("Running xlsx extractor as script", path=r"C:\Users\Rahul\Desktop\test.xlsx")
-#     logger.info("Extractor output", result=extract_xlsx(r"C:\Users\Rahul\Desktop\test.xlsx"))

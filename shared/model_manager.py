@@ -42,6 +42,7 @@ class SharedModelManager:
                         cache_folder=".cache"
                     )
                     logger.info("Shared embedding model loaded successfully", status="loaded")
+                    print("🟢 Shared embedding model loaded successfully")
         return self._model
     
     def get_embedding_dimension(self) -> int:

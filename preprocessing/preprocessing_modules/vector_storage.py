@@ -79,6 +79,7 @@ class VectorStorage:
                 logger.info("Created new unified table", collection=self.collection_name)
             
             logger.info("Successfully stored all vectors for document", doc_id=doc_id)
+            print("🟢 Vectors stored successfully")
             
         except Exception as e:
             logger.error("Error storing vectors for document", doc_id=doc_id, error=str(e))

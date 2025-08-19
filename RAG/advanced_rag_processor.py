@@ -103,6 +103,7 @@ class AdvancedRAGProcessor:
         # Summary message
         if module_count == total_modules:
             app_logger.info("All modules loaded successfully")
+            print("🟢 All modules loaded succesfully!!")
         else:
             app_logger.warning(
                 "Some modules failed or were skipped during initialization",
