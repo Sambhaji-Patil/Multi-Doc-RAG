@@ -5,7 +5,10 @@ __pycache__/
 */__pycache__
 test*
 all-MiniLM-L6-v2
-cross-encoder/ms-marco-MiniLM-L-6-v2
+Ahmednogood/*
+BAAI/*
+cross-encoder/*
+nlpaueb/*
 test
 RAG/rag_embeddings/[a-z]*
 .cache/
@@ -13,3 +16,8 @@ RAG/rag_embeddings/[a-z]*
 docs
 examples
 logs
+
+database.db
+files
+
+static/lib/apryse

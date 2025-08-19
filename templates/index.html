@@ -1,0 +1,2843 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RAG Document Assistant</title>
+    <!-- MODIFICATION: Added Prism.js for syntax highlighting -->
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css"
+      rel="stylesheet"
+    />
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"
+      defer
+    ></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"
+      defer
+    ></script>
+    <script type="module" src="https://md-block.verou.me/md-block.js"></script>
+    <!-- The Apryse script is now loaded with async/defer to not block parsing -->
+    <script src="/static/lib/apryse/webviewer.min.js" async defer></script>
+    <style>
+      /* --- VISUAL OVERHAUL & ANIMATIONS --- */
+
+      :root {
+        --background-start: #0a0a14;
+        --background-end: #121222;
+        --panel-bg: rgba(18, 24, 40, 0.8);
+        --panel-border: rgba(55, 65, 81, 0.4);
+        --accent-color: #00ffff; /* Cyan */
+        --accent-glow: rgba(0, 255, 255, 0.2);
+        --text-primary: #e5e7eb;
+        --text-secondary: #9ca3af;
+        --gradient-primary: linear-gradient(135deg, #00ffff, #3b82f6);
+        --gradient-danger: linear-gradient(135deg, #ef4444, #f97316);
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        /* MODIFICATION: Custom cursor will be handled by our divs */
+        cursor: none;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        background-color: var(--background-start);
+        color: var(--text-primary);
+        height: 100vh;
+        overflow: hidden; /* Prevent body scrollbars */
+        background-image: linear-gradient(
+            var(--panel-border) 1px,
+            transparent 1px
+          ),
+          linear-gradient(to right, var(--panel-border) 1px, transparent 1px);
+        background-size: 40px 40px;
+        animation: pan-background 60s linear infinite;
+      }
+
+      @keyframes pan-background {
+        0% {
+          background-position: 0% 0%;
+        }
+        100% {
+          background-position: 100% 100%;
+        }
+      }
+
+      /* MODIFICATION: New Particle Cursor Styles */
+      #custom-cursor {
+        position: fixed;
+        width: 20px;
+        height: 20px;
+        background: var(--accent-color);
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        z-index: 99999;
+        filter: blur(5px);
+        transition: transform 0.2s ease-out;
+      }
+      .particle {
+        position: fixed;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 99998;
+        animation: particle-fade 0.8s forwards;
+      }
+      @keyframes particle-fade {
+        from {
+          transform: scale(1);
+          opacity: 1;
+        }
+        to {
+          transform: scale(0.5) translate(var(--dx), var(--dy));
+          opacity: 0;
+        }
+      }
+
+      /* NEW: Entry Animations */
+      [data-cool-fx] {
+        opacity: 0;
+        transform: translateY(20px);
+        transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+      }
+      [data-cool-fx].in-view {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      /* --- ENHANCED STYLES --- */
+
+      .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(10, 10, 20, 0.98);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        flex-direction: column;
+        gap: 1.5rem;
+      }
+      .loading-text {
+        font-size: 1.5rem;
+        color: var(--text-primary);
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        opacity: 0.8;
+      }
+      .spinner {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        border: 4px solid transparent;
+        border-top-color: var(--accent-color);
+        animation: spin 1.2s cubic-bezier(0.6, 0, 0.4, 1) infinite;
+        position: relative;
+      }
+      .spinner::before {
+        content: "";
+        position: absolute;
+        top: 5px;
+        left: 5px;
+        right: 5px;
+        bottom: 5px;
+        border-radius: 50%;
+        border: 4px solid transparent;
+        border-top-color: var(--accent-color);
+        opacity: 0.6;
+        animation: spin 2s linear reverse infinite;
+      }
+
+      .auth-container {
+        display: none;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+      }
+      .auth-card {
+        background: var(--panel-bg);
+        backdrop-filter: blur(20px);
+        border: 1px solid var(--panel-border);
+        border-radius: 16px;
+        padding: 2.5rem;
+        width: 100%;
+        max-width: 400px;
+        box-shadow: 0 0 50px rgba(0, 0, 0, 0.5), 0 0 20px var(--accent-glow);
+      }
+      .auth-title {
+        font-size: 2rem;
+        font-weight: 700;
+        text-align: center;
+        margin-bottom: 2rem;
+        background: var(--gradient-primary);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      .form-input {
+        width: 100%;
+        padding: 0.75rem;
+        background: rgba(17, 24, 39, 0.8);
+        border: 1px solid var(--panel-border);
+        border-radius: 8px;
+        color: var(--text-primary);
+        font-size: 1rem;
+        transition: all 0.3s ease;
+      }
+      .form-input:focus {
+        outline: none;
+        border-color: var(--accent-color);
+        box-shadow: 0 0 0 3px var(--accent-glow);
+      }
+      .auth-button {
+        width: 100%;
+        padding: 0.875rem;
+        background: var(--gradient-primary);
+        border: none;
+        border-radius: 8px;
+        color: black;
+        font-weight: 600;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        margin-bottom: 1rem;
+      }
+      .auth-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px var(--accent-glow);
+      }
+      .auth-button:active {
+        transform: translateY(-1px) scale(0.98);
+      }
+      .auth-switch button {
+        background: none;
+        border: none;
+        color: var(--accent-color);
+        text-decoration: none;
+        font-weight: 500;
+      }
+      .app-container {
+        display: none;
+        height: 100vh;
+        position: relative;
+        overflow: hidden;
+      }
+      .header {
+        background: var(--panel-bg);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--panel-border);
+        padding: 1rem 2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        z-index: 1000;
+        height: 65px; /* Fixed header height */
+      }
+      .logo {
+        font-size: 1.5rem;
+        font-weight: 700;
+        background: var(--gradient-primary);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow: 0 0 10px var(--accent-glow);
+      }
+
+      /* MODIFICATION: Styles for stacked buttons */
+      .header-actions {
+        display: flex;
+        gap: 1rem;
+        align-items: center; /* Vertically align items */
+      }
+      .stacked-buttons {
+        display: flex;
+        flex-direction: row;
+        gap: 0.5rem;
+      }
+      .stacked-buttons .btn {
+        width: 150px; /* Give them a consistent width */
+        text-align: center;
+      }
+
+      .btn {
+        padding: 0.5rem 1rem;
+        border: none;
+        border-radius: 6px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+      }
+      .btn:after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 5px;
+        height: 5px;
+        background: rgba(255, 255, 255, 0.5);
+        opacity: 0;
+        border-radius: 100%;
+        transform: scale(1, 1) translate(-50%, -50%);
+        transform-origin: 50% 50%;
+      }
+      @keyframes ripple {
+        0% {
+          transform: scale(0, 0) translate(-50%, -50%);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(20, 20) translate(-50%, -50%);
+          opacity: 0;
+        }
+      }
+      .btn:focus:not(:active)::after {
+        animation: ripple 1s ease-out;
+      }
+      .btn-primary {
+        background: var(--gradient-primary);
+        color: black;
+      }
+      .btn-secondary {
+        background: var(--panel-bg);
+        color: var(--text-primary);
+        border: 1px solid var(--panel-border);
+      }
+      .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
+      }
+      .btn-primary:hover {
+        box-shadow: 0 6px 20px var(--accent-glow);
+      }
+
+      .main-content {
+        display: flex;
+        height: calc(100vh - 65px);
+      }
+      .sidebar {
+        width: 320px;
+        background: var(--panel-bg);
+        backdrop-filter: blur(10px);
+        border-right: 1px solid var(--panel-border);
+        display: flex;
+        flex-direction: column;
+        transition: width 0.3s ease-in-out;
+        overflow: hidden;
+      }
+      .sidebar.collapsed {
+        width: 0;
+        border-right-color: transparent;
+      }
+      .sidebar.collapsed .sidebar-header,
+      .sidebar.collapsed .sessions-list {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .sidebar-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid var(--panel-border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: opacity 0.3s ease;
+      }
+      #sidebarToggleBtn {
+        background: rgba(75, 85, 99, 0.5);
+        border: none;
+        border-radius: 50%;
+        color: #d1d5db;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+        position: absolute;
+        left: 304px;
+        top: 80px;
+        z-index: 1100;
+      }
+      #sidebarToggleBtn:hover {
+        background: var(--accent-glow);
+        color: var(--accent-color);
+        transform: scale(1.1);
+      }
+      #sidebarToggleBtn.collapsed {
+        left: 10px;
+        transform: rotate(180deg);
+      }
+
+      .session-item {
+        background: rgba(31, 41, 55, 0.5);
+        border: 1px solid var(--panel-border);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+      }
+      .session-item:before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          var(--accent-glow),
+          transparent
+        );
+        transition: left 0.4s ease;
+      }
+      .session-item:hover:before {
+        left: 100%;
+      }
+      .session-item:hover {
+        background: rgba(31, 41, 55, 0.8);
+        border-color: var(--accent-color);
+        transform: translateY(-2px);
+        box-shadow: 0 0 15px var(--accent-glow);
+      }
+      .session-item.active {
+        border-color: var(--accent-color);
+        background: var(--accent-glow);
+        box-shadow: 0 0 15px var(--accent-glow);
+      }
+      .chat-panel {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        width: 380px;
+        height: calc(100% - 40px);
+        max-height: 800px;
+        background: var(--panel-bg);
+        backdrop-filter: blur(20px);
+        border: 1px solid var(--panel-border);
+        border-radius: 16px;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+        z-index: 100;
+        transition: width 0.3s ease, height 0.3s ease, opacity 0.3s ease,
+          box-shadow 0.3s ease;
+      }
+      .chat-panel:hover {
+        box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), 0 0 25px var(--accent-glow);
+      }
+
+      .message.user {
+        background: var(--gradient-primary);
+        color: black;
+        align-self: flex-end;
+        margin-left: auto;
+      }
+      .message.assistant {
+        background: rgba(31, 41, 55, 0.8);
+        border: 1px solid var(--panel-border);
+        align-self: flex-start;
+      }
+
+      .send-btn {
+        padding: 0.75rem 1rem;
+        background: var(--gradient-primary);
+        color: black;
+        border: none;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+        align-self: flex-end;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .send-btn:hover {
+        transform: scale(1.05);
+        box-shadow: 0 5px 15px var(--accent-glow);
+      }
+      .send-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+      .send-btn#micBtn.active {
+        background: var(--gradient-danger);
+        box-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
+      }
+      .send-btn#micBtn.recording {
+        animation: pulse-red 1.5s infinite;
+      }
+
+      /* --- All other existing CSS remains the same, but benefits from the :root variables --- */
+      .sessions-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1rem;
+        transition: opacity 0.3s ease;
+      }
+      .sidebar-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 0;
+      }
+      #sidebarToggleBtn svg {
+        width: 18px;
+        height: 18px;
+      }
+      .session-name {
+        font-weight: 500;
+        margin-bottom: 4px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        padding-right: 20px;
+      }
+      .session-date {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+      }
+      .delete-session-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        background: none;
+        border: none;
+        color: var(--text-secondary);
+        font-size: 1.2rem;
+        line-height: 1;
+        padding: 4px;
+        border-radius: 50%;
+        transition: all 0.2s ease;
+      }
+      .delete-session-btn:hover {
+        color: #ef4444;
+        background-color: rgba(239, 68, 68, 0.1);
+      }
+      .session-docs {
+        margin-top: 0.5rem;
+      }
+      .doc-item {
+        background: rgba(17, 24, 39, 0.8);
+        border-radius: 4px;
+        padding: 0.5rem;
+        margin: 0.25rem 0;
+        font-size: 0.875rem;
+        transition: all 0.3s ease;
+      }
+      .doc-item:hover {
+        background: var(--accent-glow);
+      }
+      .doc-item.active {
+        background: var(--accent-glow);
+        border-left: 3px solid var(--accent-color);
+      }
+      .viewer-container {
+        flex: 1;
+        position: relative;
+        background: #1f2937;
+        overflow: hidden;
+        transition: width 0.3s ease-in-out;
+      }
+      .viewer-loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(31, 41, 55, 0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 100;
+        flex-direction: column;
+        gap: 1.5rem;
+        backdrop-filter: blur(5px);
+      }
+      .viewer-area {
+        width: 100%;
+        height: 100%;
+        background: #1f2937;
+      }
+      .text-viewer {
+        width: 100%;
+        height: 100%;
+        background-color: #282c34;
+        overflow: auto;
+        color: #f8f8f2;
+        padding: 1rem;
+        font-family: "Fira Code", "Courier New", monospace;
+      }
+      .text-viewer pre {
+        margin: 0;
+        height: 100%;
+        font-size: 0.9rem;
+      }
+      .upload-area {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        background: var(--panel-bg);
+        backdrop-filter: blur(20px);
+        border: 2px dashed var(--panel-border);
+        border-radius: 16px;
+        padding: 3rem;
+        width: 80%;
+        max-width: 500px;
+        transition: all 0.3s ease;
+      }
+      .upload-area:hover {
+        border-color: var(--accent-color);
+        box-shadow: 0 0 20px var(--accent-glow);
+      }
+      .upload-icon {
+        font-size: 4rem;
+        color: #6b7280;
+        margin-bottom: 1rem;
+      }
+      .upload-text {
+        font-size: 1.25rem;
+        margin-bottom: 1rem;
+        color: #d1d5db;
+      }
+      .file-input {
+        display: none;
+      }
+      .upload-btn {
+        display: inline-block;
+        padding: 0.75rem 2rem;
+        background: var(--gradient-primary);
+        color: black;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+        margin: 0.5rem;
+      }
+      .upload-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px var(--accent-glow);
+      }
+      .url-input {
+        width: 100%;
+        padding: 0.75rem;
+        background: rgba(17, 24, 39, 0.8);
+        border: 1px solid var(--panel-border);
+        border-radius: 8px;
+        color: #e5e7eb;
+        margin: 0.5rem 0;
+      }
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(15, 15, 35, 0.85);
+        backdrop-filter: blur(10px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 2000;
+        transition: opacity 0.3s ease;
+      }
+      .modal-content {
+        background: var(--panel-bg);
+        border: 1px solid var(--panel-border);
+        border-radius: 16px;
+        padding: 2.5rem;
+        width: 100%;
+        max-width: 500px;
+        box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+        position: relative;
+        text-align: center;
+      }
+      .modal-close-btn {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        background: none;
+        border: none;
+        color: #9ca3af;
+        font-size: 1.5rem;
+        line-height: 1;
+        padding: 4px;
+        border-radius: 50%;
+        transition: all 0.2s ease;
+      }
+      .modal-close-btn:hover {
+        color: #ef4444;
+        background-color: rgba(239, 68, 68, 0.1);
+      }
+      .modal-content h2 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 2rem;
+      }
+      .chat-header {
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid var(--panel-border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: move;
+      }
+      .chat-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        user-select: none;
+      }
+      .chat-controls {
+        display: flex;
+        gap: 0.5rem;
+      }
+      .chat-control-btn {
+        background: none;
+        border: none;
+        color: #9ca3af;
+        font-size: 1.2rem;
+        padding: 4px;
+        line-height: 1;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .chat-control-btn svg {
+        width: 20px;
+        height: 20px;
+      }
+      .chat-control-btn:hover {
+        color: #e5e7eb;
+        background-color: rgba(75, 85, 99, 0.5);
+      }
+      .chat-control-btn.active {
+        color: var(--accent-color);
+      }
+      .chat-panel.minimized {
+        height: 52px;
+        width: 250px;
+        overflow: hidden;
+      }
+      .chat-panel.minimized .chat-messages,
+      .chat-panel.minimized .chat-input-area {
+        display: none;
+      }
+      .chat-panel.minimized #minimizeChatBtn {
+        display: none;
+      }
+      .chat-panel:not(.minimized) #restoreChatBtn {
+        display: none;
+      }
+      .chat-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+      .message {
+        max-width: 85%;
+        padding: 1rem;
+        border-radius: 12px;
+        line-height: 1.6;
+        position: relative;
+      }
+      .message-text {
+        display: inline;
+        position: relative;
+        word-wrap: break-word;
+        white-space: pre-wrap;
+      }
+      .reference-icon {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        background: var(--gradient-primary);
+        border-radius: 50%;
+        margin: 0 2px;
+        position: relative;
+        vertical-align: middle;
+        font-size: 10px;
+        color: black;
+        text-align: center;
+        line-height: 16px;
+        font-weight: bold;
+        transition: all 0.2s ease;
+        user-select: none;
+      }
+      .reference-icon:hover {
+        transform: scale(1.2);
+        box-shadow: 0 2px 8px var(--accent-glow);
+      }
+      .reference-icon.active {
+        background: var(--gradient-danger);
+        box-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
+        animation: pulse 1s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.1);
+        }
+      }
+      .reference-tooltip {
+        position: absolute;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--panel-bg);
+        border: 1px solid var(--panel-border);
+        border-radius: 6px;
+        padding: 0.5rem;
+        font-size: 0.75rem;
+        white-space: nowrap;
+        z-index: 1000;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+        max-width: 200px;
+        word-break: break-word;
+        white-space: normal;
+      }
+      .reference-icon:hover .reference-tooltip {
+        opacity: 1;
+      }
+      .reference-loading {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border: 2px solid rgba(0, 255, 255, 0.3);
+        border-top: 2px solid var(--accent-color);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 4px;
+        vertical-align: middle;
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+      .highlight-status {
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        background: var(--panel-bg);
+        border: 1px solid var(--panel-border);
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+        z-index: 1001;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        transform: translateX(400px);
+        transition: transform 0.3s ease;
+      }
+      .highlight-status.show {
+        transform: translateX(0);
+      }
+      .highlight-status.success {
+        border-color: #22c55e;
+        color: #22c55e;
+      }
+      .highlight-status.error {
+        border-color: #ef4444;
+        color: #ef4444;
+      }
+      .highlight-status.searching {
+        border-color: var(--accent-color);
+        color: var(--accent-color);
+      }
+      .chat-input-area {
+        padding: 1rem;
+        border-top: 1px solid var(--panel-border);
+      }
+      .chat-input-group {
+        display: flex;
+        gap: 0.5rem;
+        align-items: flex-end;
+      }
+      .chat-input {
+        flex: 1;
+        padding: 0.75rem;
+        background: rgba(31, 41, 55, 0.8);
+        border: 1px solid var(--panel-border);
+        border-radius: 8px;
+        color: #e5e7eb;
+        resize: none;
+        min-height: 40px;
+        max-height: 120px;
+        transition: all 0.3s ease;
+      }
+      .chat-input:focus {
+        border-color: var(--accent-color);
+        box-shadow: 0 0 10px var(--accent-glow);
+      }
+      @keyframes pulse-red {
+        0% {
+          box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+        }
+        70% {
+          box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+        }
+      }
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--panel-border);
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--accent-color);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- MODIFICATION: New particle cursor element -->
+    <div id="custom-cursor"></div>
+
+    <!-- Loading Screen -->
+    <div id="loadingOverlay" class="loading-overlay">
+      <div class="spinner"></div>
+      <div id="loadingText" class="loading-text">Loading Interface...</div>
+    </div>
+
+    <!-- Auth Screen -->
+    <div id="authScreen" class="auth-container">
+      <div class="auth-card" data-cool-fx>
+        <h1 class="auth-title">RAG Assistant</h1>
+        <div id="loginForm">
+          <div class="form-group">
+            <label class="form-label">Email</label
+            ><input
+              type="email"
+              id="loginEmail"
+              class="form-input"
+              placeholder="Enter your email"
+            />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label
+            ><input
+              type="password"
+              id="loginPassword"
+              class="form-input"
+              placeholder="Enter your password"
+            />
+          </div>
+          <button id="loginBtn" class="auth-button">Sign In</button>
+          <div class="auth-switch">
+            Don't have an account? <button id="showSignup">Sign Up</button>
+          </div>
+        </div>
+        <div id="signupForm" style="display: none">
+          <div class="form-group">
+            <label class="form-label">Email</label
+            ><input
+              type="email"
+              id="signupEmail"
+              class="form-input"
+              placeholder="Enter your email"
+            />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label
+            ><input
+              type="password"
+              id="signupPassword"
+              class="form-input"
+              placeholder="Create a password"
+            />
+          </div>
+          <button id="signupBtn" class="auth-button">Sign Up</button>
+          <div class="auth-switch">
+            Already have an account? <button id="showLogin">Sign In</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="appContainer" class="app-container">
+      <!-- Header -->
+      <div class="header" data-cool-fx>
+        <div class="logo">RAG Assistant</div>
+        <div class="header-actions">
+          <!-- MODIFICATION: Buttons are now wrapped and stacked -->
+          <div class="stacked-buttons">
+            <button
+              id="addDocsBtn"
+              class="btn btn-secondary"
+              style="display: none"
+            >
+              Add Docs
+            </button>
+            <button id="newSessionBtn" class="btn btn-primary">
+              New Session
+            </button>
+          </div>
+          <button id="logoutBtn" class="btn btn-secondary">Logout</button>
+        </div>
+      </div>
+
+      <div class="main-content">
+        <!-- Sidebar -->
+        <div id="sidebar" class="sidebar" data-cool-fx>
+          <div class="sidebar-header">
+            <h3 class="sidebar-title">Sessions</h3>
+          </div>
+          <div id="sessionsList" class="sessions-list"></div>
+        </div>
+
+        <button id="sidebarToggleBtn" title="Toggle Sidebar">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="1.5"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M15.75 19.5L8.25 12l7.5-7.5"
+            />
+          </svg>
+        </button>
+
+        <!-- Viewer Container -->
+        <div class="viewer-container" data-cool-fx>
+          <div id="viewerArea" class="viewer-area">
+            <div id="uploadArea" class="upload-area" style="display: none">
+              <div class="upload-icon">📄</div>
+              <div class="upload-text">
+                Drag & drop files or upload to get started
+              </div>
+              <label for="fileInput" class="upload-btn">Choose Files</label>
+              <input
+                type="file"
+                id="fileInput"
+                class="file-input"
+                multiple
+                accept=".pdf,.pptx,.docx,.xlsx,.csv,.txt,.md,.png,.jpg,.jpeg,.py,.js,.html,.css,.java,.json"
+              />
+              <div style="margin: 1rem 0; color: #9ca3af">or</div>
+              <input
+                type="url"
+                id="urlInput"
+                class="url-input"
+                placeholder="Enter document URL"
+              />
+              <button id="uploadUrlBtn" class="upload-btn">Upload URL</button>
+            </div>
+            <div id="apryseViewer" style="height: 100%"></div>
+          </div>
+
+          <!-- Chat Panel -->
+          <div
+            id="chatPanel"
+            class="chat-panel"
+            style="display: none"
+            data-cool-fx
+          >
+            <div class="chat-header">
+              <div class="chat-title">Chat</div>
+              <div class="chat-controls">
+                <button
+                  id="toggleSpeechBtn"
+                  class="chat-control-btn active"
+                  title="Toggle Speech Output"
+                >
+                  <svg
+                    class="speaker-on"
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <polygon
+                      points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"
+                    ></polygon>
+                    <path
+                      d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"
+                    ></path>
+                  </svg>
+                  <svg
+                    class="speaker-off"
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    style="display: none"
+                  >
+                    <polygon
+                      points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"
+                    ></polygon>
+                    <line x1="23" y1="9" x2="17" y2="15"></line>
+                    <line x1="17" y1="9" x2="23" y2="15"></line>
+                  </svg>
+                </button>
+                <button
+                  id="minimizeChatBtn"
+                  class="chat-control-btn"
+                  title="Minimize"
+                >
+                  —
+                </button>
+                <button
+                  id="restoreChatBtn"
+                  class="chat-control-btn"
+                  title="Restore"
+                >
+                  &#9633;
+                </button>
+                <button
+                  id="closeChatBtn"
+                  class="chat-control-btn"
+                  title="Close"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            <div id="chatMessages" class="chat-messages"></div>
+            <div class="chat-input-area">
+              <div class="chat-input-group">
+                <textarea
+                  id="chatInput"
+                  class="chat-input"
+                  placeholder="Ask a question..."
+                ></textarea>
+                <button
+                  id="settingsBtn"
+                  class="send-btn"
+                  title="Voice Settings"
+                  style="padding: 0.75rem; background: rgba(75, 85, 99, 0.5)"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    style="pointer-events: none"
+                  >
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path
+                      d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+                    ></path>
+                  </svg>
+                </button>
+                <button
+                  id="micBtn"
+                  class="send-btn"
+                  title="Toggle Voice Commands"
+                  style="padding: 0.75rem"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    style="pointer-events: none"
+                  >
+                    <path
+                      d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"
+                    ></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="22"></line>
+                  </svg>
+                </button>
+                <button id="sendBtn" class="send-btn">Send</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Docs Modal -->
+    <div id="addDocsModal" class="modal-overlay" style="display: none">
+      <div class="modal-content">
+        <button id="closeModalBtn" class="modal-close-btn" title="Close">
+          &times;
+        </button>
+        <h2>Add Documents to Session</h2>
+        <div class="upload-area-content">
+          <label for="modalFileInput" class="upload-btn">Choose Files</label>
+          <input
+            type="file"
+            id="modalFileInput"
+            class="file-input"
+            multiple
+            accept=".pdf,.pptx,.docx,.xlsx,.csv,.txt,.md,.png,.jpg,.jpeg,.py,.js,.html,.css,.java,.json"
+          />
+          <div style="margin: 1rem 0; color: #9ca3af">or</div>
+          <input
+            type="url"
+            id="modalUrlInput"
+            class="url-input"
+            placeholder="Enter document URL"
+          />
+          <button id="modalUploadUrlBtn" class="upload-btn">Upload URL</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Global state
+      let currentUser = null;
+      let currentSession = null;
+      let currentDocId = null;
+      let sessions = [];
+      let currentBlobUrl = null;
+      let webviewerInstance = null;
+      let currentHighlights = [];
+      let documentTextCache = new Map();
+      let currentReferences = [];
+      let pendingUploadData = null;
+
+      // Sky Blue / Light Cyan
+      const SkyBlue = { r: 179, g: 229, b: 252, a: 0.35 };
+      const LightCyan = { r: 224, g: 247, b: 250, a: 0.35 };
+
+      // Mint Green
+      const MintGreen1 = { r: 167, g: 243, b: 208, a: 0.35 };
+      const MintGreen2 = { r: 208, g: 251, b: 228, a: 0.35 };
+
+      // Lavender / Soft Purple
+      const Lavender1 = { r: 237, g: 231, b: 246, a: 0.35 };
+      const Lavender2 = { r: 209, g: 196, b: 233, a: 0.35 };
+
+      // Pastel Pink
+      const Pink1 = { r: 252, g: 228, b: 236, a: 0.35 };
+      const Pink2 = { r: 248, g: 187, b: 208, a: 0.35 };
+
+      // Light Gray
+      const Gray1 = { r: 245, g: 245, b: 245, a: 0.35 };
+      const Gray2 = { r: 238, g: 238, b: 238, a: 0.35 };
+
+      // Extra picks (modern/cool)
+      const Teal = { r: 204, g: 251, b: 241, a: 0.35 };
+      const SoftLavender = { r: 233, g: 213, b: 255, a: 0.35 };
+      // --- MODIFICATION: New Highlight Color (Vibrant Magenta) ---
+      var highlightColor = SoftLavender;
+
+      // Voice command state
+      let speechRecognition = null;
+      let isMicEnabled = false;
+      let isRecording = false;
+      let isPushToTalkActive = false;
+      let wakeWord = "hello shastra";
+      let isSpeechOutputEnabled = true;
+      let currentSpokenReferenceIndex = -1;
+      let micPressTimer = null;
+      const longPressThreshold = 250;
+      let silenceTimer = null;
+      const silenceTimeoutDuration = 1500;
+
+      const PORT = 7860;
+      const API_BASE = `http://localhost:${PORT}`;
+
+      // --- APPLICATION INITIALIZATION ---
+      document.addEventListener("DOMContentLoaded", function () {
+        waitForWebViewer();
+      });
+
+      function waitForWebViewer() {
+        if (window.WebViewer) {
+          initializeApplication();
+        } else {
+          setTimeout(waitForWebViewer, 100);
+        }
+      }
+
+      function initializeApplication() {
+        console.log("DOM loaded, initializing application...");
+        initializeWebViewer();
+        registerServiceWorker();
+      }
+
+      function registerServiceWorker() {
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker
+            .register("/service-worker.js")
+            .then((registration) =>
+              console.log(
+                "Service Worker registered with scope:",
+                registration.scope
+              )
+            )
+            .catch((error) =>
+              console.error("Service Worker registration failed:", error)
+            );
+        }
+      }
+
+      function initializeWebViewer() {
+        const apryseViewerDiv = document.getElementById("apryseViewer");
+        if (!apryseViewerDiv) {
+          console.error(
+            "Cannot initialize WebViewer: #apryseViewer not found."
+          );
+          document.getElementById("loadingText").textContent =
+            "Initialization Error!";
+          return;
+        }
+        WebViewer(
+          {
+            path: "/static/lib/apryse",
+            fullAPI: true,
+            ui: "beta",
+            theme: "dark",
+          },
+          apryseViewerDiv
+        )
+          .then((instance) => {
+            webviewerInstance = instance;
+            console.log("Apryse WebViewer initialized successfully.");
+            const { UI } = instance;
+            UI.setTheme("dark");
+            UI.setLanguage("en");
+            apryseViewerDiv.style.display = "none";
+            startApp();
+          })
+          .catch((error) => {
+            console.error("Apryse WebViewer failed to initialize:", error);
+            document.getElementById("loadingText").textContent =
+              "Failed to load document viewer. Please refresh.";
+          });
+      }
+
+      function startApp() {
+        const loadingTexts = [
+          "Initializing Quantum Core...",
+          "Syncing Neural Interface...",
+          "Reticulating Splines...",
+        ];
+        let textIndex = 0;
+        const loadingTextEl = document.getElementById("loadingText");
+        const loadingInterval = setInterval(() => {
+          textIndex = (textIndex + 1) % loadingTexts.length;
+          loadingTextEl.style.opacity = 0;
+          setTimeout(() => {
+            loadingTextEl.textContent = loadingTexts[textIndex];
+            loadingTextEl.style.opacity = 1;
+          }, 300);
+        }, 2000);
+
+        const loadingOverlay = document.getElementById("loadingOverlay");
+        loadingOverlay.style.opacity = "0";
+        setTimeout(() => {
+          loadingOverlay.style.display = "none";
+          clearInterval(loadingInterval);
+        }, 500);
+
+        checkAuthStatus();
+        setupEventListeners();
+        initializeSpeechServices();
+        testApiConnection();
+        initCustomCursor(); // MODIFICATION: Initialize the new particle cursor
+      }
+
+      // --- MODIFICATION: New Particle Cursor Logic ---
+      function initCustomCursor() {
+        const cursor = document.getElementById("custom-cursor");
+        const particleColors = ["#00ffff", "#ff00ff", "#8A2BE2"]; // Cyan, Magenta, BlueViolet
+
+        window.addEventListener("mousemove", (e) => {
+          // Move the main cursor glow
+          cursor.style.left = `${e.clientX}px`;
+          cursor.style.top = `${e.clientY}px`;
+
+          // Create a particle
+          const particle = document.createElement("div");
+          particle.className = "particle";
+          document.body.appendChild(particle);
+
+          const size = Math.floor(Math.random() * 8 + 4);
+          const x = e.clientX + (Math.random() * 20 - 10);
+          const y = e.clientY + (Math.random() * 20 - 10);
+          const dx = (Math.random() - 0.5) * 50 + "px";
+          const dy = (Math.random() - 0.5) * 50 + "px";
+
+          particle.style.width = `${size}px`;
+          particle.style.height = `${size}px`;
+          particle.style.left = `${x}px`;
+          particle.style.top = `${y}px`;
+          particle.style.background =
+            particleColors[Math.floor(Math.random() * particleColors.length)];
+          particle.style.setProperty("--dx", dx);
+          particle.style.setProperty("--dy", dy);
+
+          // Remove particle from DOM after animation
+          particle.addEventListener("animationend", () => {
+            particle.remove();
+          });
+        });
+      }
+
+      // --- AUTH AND UI LOGIC ---
+      function checkAuthStatus() {
+        const savedUserId = localStorage.getItem("userId");
+        if (savedUserId) {
+          currentUser = savedUserId;
+          showApp();
+          loadSessions();
+        } else {
+          showAuth();
+        }
+      }
+
+      function showApp() {
+        document.getElementById("authScreen").style.display = "none";
+        document.getElementById("appContainer").style.display = "block";
+        const animatedElements = document.querySelectorAll("[data-cool-fx]");
+        animatedElements.forEach((el, index) => {
+          setTimeout(() => {
+            el.classList.add("in-view");
+          }, 150 * (index + 1));
+        });
+      }
+
+      function showAuth() {
+        document.getElementById("authScreen").style.display = "flex";
+        document.getElementById("appContainer").style.display = "none";
+        setTimeout(() => {
+          document
+            .querySelector("#authScreen [data-cool-fx]")
+            .classList.add("in-view");
+        }, 100);
+      }
+
+      // --- MODIFICATION: highlightTextInDocument function ---
+      async function highlightTextInDocument(matchResult) {
+        if (
+          !webviewerInstance ||
+          !matchResult ||
+          !matchResult.quads ||
+          matchResult.quads.length === 0
+        ) {
+          console.error(
+            "Cannot highlight: Invalid matchResult or missing quads.",
+            matchResult
+          );
+          return null;
+        }
+        const { annotationManager, documentViewer, Annotations } =
+          webviewerInstance.Core;
+        try {
+          await documentViewer.setCurrentPage(matchResult.pageNumber);
+          const highlight = new Annotations.TextHighlightAnnotation({
+            PageNumber: matchResult.pageNumber,
+            Quads: matchResult.quads,
+          });
+
+          // Apply custom color from the global constant
+          const { Color } = Annotations;
+          highlight.Color = new Color(
+            highlightColor.r,
+            highlightColor.g,
+            highlightColor.b,
+            highlightColor.a
+          );
+          highlight.StrokeColor = new Color(
+            highlightColor.r,
+            highlightColor.g,
+            highlightColor.b,
+            1
+          );
+
+          await annotationManager.addAnnotation(highlight);
+          annotationManager.redrawAnnotation(highlight);
+          currentHighlights.push(highlight.Id);
+          return highlight.Id;
+        } catch (error) {
+          console.error(
+            "Error creating or adding highlight annotation:",
+            error
+          );
+          return null;
+        }
+      }
+
+      /* ================================================================== */
+      /* --- THE REST OF THE JAVASCRIPT LOGIC IS UNCHANGED. --- */
+      /* ================================================================== */
+      async function testApiConnection() {
+        try {
+          const response = await fetch(`${API_BASE}/hello`);
+          if (!response.ok) {
+            showNotification("Cannot connect to backend server.", "error");
+          }
+        } catch (error) {
+          console.error("API connection test failed:", error);
+          showNotification(
+            `Cannot connect to backend. Make sure it's running on port ${PORT}`,
+            "error"
+          );
+        }
+      }
+      function setupEventListeners() {
+        document.getElementById("showSignup").addEventListener("click", () => {
+          document.getElementById("loginForm").style.display = "none";
+          document.getElementById("signupForm").style.display = "block";
+        });
+        document.getElementById("showLogin").addEventListener("click", () => {
+          document.getElementById("signupForm").style.display = "none";
+          document.getElementById("loginForm").style.display = "block";
+        });
+        document
+          .getElementById("loginBtn")
+          .addEventListener("click", handleLogin);
+        document
+          .getElementById("signupBtn")
+          .addEventListener("click", handleSignup);
+        document
+          .getElementById("logoutBtn")
+          .addEventListener("click", handleLogout);
+        document
+          .getElementById("loginPassword")
+          .addEventListener("keypress", (e) => {
+            if (e.key === "Enter") handleLogin();
+          });
+        document
+          .getElementById("signupPassword")
+          .addEventListener("keypress", (e) => {
+            if (e.key === "Enter") handleSignup();
+          });
+        document
+          .getElementById("sidebarToggleBtn")
+          .addEventListener("click", () => {
+            const sidebar = document.getElementById("sidebar");
+            const toggleBtn = document.getElementById("sidebarToggleBtn");
+            sidebar.classList.toggle("collapsed");
+            toggleBtn.classList.toggle("collapsed");
+          });
+        document
+          .getElementById("newSessionBtn")
+          .addEventListener("click", () => createNewSession());
+        document.getElementById("addDocsBtn").addEventListener("click", () => {
+          if (!currentSession) {
+            return showNotification("Please select a session first.", "error");
+          }
+          document.getElementById("addDocsModal").style.display = "flex";
+        });
+        document
+          .getElementById("fileInput")
+          .addEventListener("change", (e) => handleFileUpload(e.target.files));
+        document
+          .getElementById("uploadUrlBtn")
+          .addEventListener("click", () =>
+            uploadFromUrl(document.getElementById("urlInput").value.trim())
+          );
+        document
+          .getElementById("urlInput")
+          .addEventListener("keypress", (e) => {
+            if (e.key === "Enter")
+              uploadFromUrl(document.getElementById("urlInput").value.trim());
+          });
+        const addDocsModal = document.getElementById("addDocsModal");
+        document
+          .getElementById("closeModalBtn")
+          .addEventListener("click", () => {
+            addDocsModal.style.display = "none";
+          });
+        addDocsModal.addEventListener("click", (e) => {
+          if (e.target === addDocsModal) {
+            addDocsModal.style.display = "none";
+          }
+        });
+        document
+          .getElementById("modalFileInput")
+          .addEventListener("change", (e) => {
+            handleFileUpload(e.target.files);
+            addDocsModal.style.display = "none";
+          });
+        document
+          .getElementById("modalUploadUrlBtn")
+          .addEventListener("click", () => {
+            const url = document.getElementById("modalUrlInput").value.trim();
+            uploadFromUrl(url);
+            addDocsModal.style.display = "none";
+          });
+        document
+          .getElementById("sendBtn")
+          .addEventListener("click", sendMessage);
+        document
+          .getElementById("closeChatBtn")
+          .addEventListener("click", () => {
+            document.getElementById("chatPanel").style.display = "none";
+          });
+        const chatInput = document.getElementById("chatInput");
+        chatInput.addEventListener("keypress", (e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+          }
+        });
+        chatInput.addEventListener("input", function () {
+          this.style.height = "auto";
+          this.style.height = Math.min(this.scrollHeight, 120) + "px";
+        });
+        document
+          .getElementById("toggleSpeechBtn")
+          .addEventListener("click", toggleSpeechOutput);
+        document
+          .getElementById("settingsBtn")
+          .addEventListener("click", setWakeWord);
+        const micBtn = document.getElementById("micBtn");
+        micBtn.addEventListener("mousedown", handleMicButtonPress);
+        document.addEventListener("mouseup", handleMicButtonRelease);
+        document.addEventListener("keydown", (e) => {
+          const activeEl = document.activeElement;
+          const isTyping =
+            activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA";
+          if (e.code === "Space" && !e.repeat && !isTyping) {
+            e.preventDefault();
+            startPushToTalk();
+          }
+          if (e.key === "Escape") {
+            if (isRecording) {
+              e.preventDefault();
+              console.log("Voice input canceled by Escape key.");
+              document.getElementById("chatInput").value = "";
+              stopVoiceServices();
+            }
+          }
+        });
+        document.addEventListener("keyup", (e) => {
+          if (e.code === "Space") {
+            stopPushToTalk();
+          }
+        });
+        initChatPanelInteractions();
+      }
+      function initChatPanelInteractions() {
+        const chatPanel = document.getElementById("chatPanel");
+        const chatHeader = chatPanel.querySelector(".chat-header");
+        const minimizeBtn = document.getElementById("minimizeChatBtn");
+        const restoreBtn = document.getElementById("restoreChatBtn");
+        const container = document.querySelector(".viewer-container");
+        let isDragging = false;
+        let offset = { x: 0, y: 0 };
+        let lastPosition = { top: "20px", left: "", right: "20px" };
+        chatHeader.addEventListener("mousedown", (e) => {
+          if (e.target.tagName === "BUTTON") return;
+          isDragging = true;
+          offset.x = e.clientX - chatPanel.offsetLeft;
+          offset.y = e.clientY - chatPanel.offsetTop;
+          chatPanel.style.transition = "none";
+        });
+        document.addEventListener("mousemove", (e) => {
+          if (!isDragging) return;
+          e.preventDefault();
+          let newX = e.clientX - offset.x;
+          let newY = e.clientY - offset.y;
+          const containerRect = container.getBoundingClientRect();
+          const panelRect = chatPanel.getBoundingClientRect();
+          newX = Math.max(
+            0,
+            Math.min(newX, containerRect.width - panelRect.width)
+          );
+          newY = Math.max(
+            0,
+            Math.min(newY, containerRect.height - panelRect.height)
+          );
+          chatPanel.style.left = `${newX}px`;
+          chatPanel.style.top = `${newY}px`;
+          chatPanel.style.right = "auto";
+        });
+        document.addEventListener("mouseup", () => {
+          if (isDragging) {
+            isDragging = false;
+            chatPanel.style.transition =
+              "width 0.3s ease, height 0.3s ease, opacity 0.3s ease";
+            if (!chatPanel.classList.contains("minimized")) {
+              lastPosition = {
+                top: chatPanel.style.top,
+                left: chatPanel.style.left,
+                right: "auto",
+              };
+            }
+          }
+        });
+        const toggleMinimize = () => {
+          const isMinimized = chatPanel.classList.toggle("minimized");
+          if (isMinimized) {
+            lastPosition = {
+              top: chatPanel.style.top || "20px",
+              left: chatPanel.style.left || "",
+              right: chatPanel.style.right || "20px",
+            };
+          } else {
+            chatPanel.style.top = lastPosition.top;
+            chatPanel.style.left = lastPosition.left;
+            chatPanel.style.right = lastPosition.right;
+          }
+        };
+        minimizeBtn.addEventListener("click", toggleMinimize);
+        restoreBtn.addEventListener("click", toggleMinimize);
+      }
+      async function handleLogin() {
+        const email = document.getElementById("loginEmail").value;
+        const password = document.getElementById("loginPassword").value;
+        if (!email || !password)
+          return showNotification("Please fill in all fields", "error");
+        try {
+          const response = await fetch(`${API_BASE}/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          });
+          const data = await response.json();
+          if (response.ok && data.user_id) {
+            currentUser = data.user_id;
+            localStorage.setItem("userId", currentUser);
+            showApp();
+            loadSessions();
+            showNotification("Login successful!", "success");
+          } else {
+            showNotification(data.error || "Login failed", "error");
+          }
+        } catch (error) {
+          showNotification("Login failed. Please try again.", "error");
+        }
+      }
+      async function handleSignup() {
+        const email = document.getElementById("signupEmail").value;
+        const password = document.getElementById("signupPassword").value;
+        if (!email || !password)
+          return showNotification("Please fill in all fields", "error");
+        try {
+          const response = await fetch(`${API_BASE}/signup`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          });
+          const data = await response.json();
+          if (response.ok && data.user_id) {
+            showNotification("Account created! Please login.", "success");
+            document.getElementById("signupForm").style.display = "none";
+            document.getElementById("loginForm").style.display = "block";
+            document.getElementById("loginEmail").value = email;
+          } else {
+            showNotification(data.error || "Signup failed", "error");
+          }
+        } catch (error) {
+          showNotification("Signup failed. Please try again.", "error");
+        }
+      }
+      function handleLogout() {
+        currentUser = null;
+        currentSession = null;
+        currentDocId = null;
+        sessions = [];
+        localStorage.removeItem("userId");
+        cleanupBlobUrl();
+        document.getElementById("chatMessages").innerHTML = "";
+        document.getElementById("sessionsList").innerHTML = "";
+        stopVoiceServices();
+        isMicEnabled = false;
+        isSpeechOutputEnabled = true;
+        updateMicButtonState();
+        updateSpeechButtonState();
+        showUploadArea();
+        showAuth();
+      }
+      async function loadSessions() {
+        if (!currentUser) return;
+        try {
+          const response = await fetch(
+            `${API_BASE}/my_sessions/${currentUser}`
+          );
+          const data = await response.json();
+          if (response.ok) {
+            sessions = data.sessions;
+            renderSessions();
+            if (sessions.length === 0) {
+              showUploadArea();
+            }
+          } else {
+            console.error("Failed to load sessions");
+          }
+        } catch (error) {
+          console.error("Error loading sessions:", error);
+        }
+      }
+      function renderSessions() {
+        const sessionsList = document.getElementById("sessionsList");
+        sessionsList.innerHTML = "";
+        sessions.forEach((session) => {
+          const sessionElement = document.createElement("div");
+          sessionElement.className = `session-item ${
+            currentSession === session.session_id ? "active" : ""
+          }`;
+          sessionElement.innerHTML = `
+            <div class="session-name">${
+              session.name || "Untitled Session"
+            }</div>
+            <div class="session-date">${formatDate(session.last_updated)}</div>
+            <button class="delete-session-btn" onclick="event.stopPropagation(); deleteSession('${
+              session.session_id
+            }')" title="Delete Session">×</button>
+            <div class="session-docs">
+                ${session.docs
+                  .map(
+                    (docId) => `
+                    <div class="doc-item ${
+                      currentDocId == docId ? "active" : ""
+                    }"
+                         onclick="event.stopPropagation(); loadDocument('${
+                           session.session_id
+                         }','${docId}')">
+                        Document ${docId}
+                    </div>`
+                  )
+                  .join("")}
+            </div>`;
+          sessionElement.addEventListener("click", () =>
+            selectSession(session.session_id)
+          );
+          sessionsList.appendChild(sessionElement);
+        });
+      }
+      function formatDate(isoString) {
+        if (!isoString) return "No activity yet";
+        const date = new Date(isoString);
+        return date.toLocaleString(undefined, {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+      async function deleteSession(sessionId) {
+        if (
+          !confirm(
+            `Are you sure you want to delete this session? This action cannot be undone.`
+          )
+        )
+          return;
+        try {
+          const response = await fetch(`${API_BASE}/session/${sessionId}`, {
+            method: "DELETE",
+          });
+          const data = await response.json();
+          if (response.ok) {
+            showNotification("Session deleted.", "success");
+            if (currentSession === sessionId) {
+              currentSession = null;
+              currentDocId = null;
+              document.getElementById("chatMessages").innerHTML = "";
+              document.getElementById("addDocsBtn").style.display = "none";
+              showUploadArea();
+            }
+            await loadSessions();
+          } else {
+            showNotification(data.error || "Failed to delete session", "error");
+          }
+        } catch (error) {
+          showNotification("An error occurred while deleting.", "error");
+        }
+      }
+      async function selectSession(sessionId) {
+        cleanupBlobUrl();
+        currentSession = sessionId;
+        currentDocId = null;
+        renderSessions();
+        document.getElementById("addDocsBtn").style.display = "block";
+        stopVoiceServices();
+        isMicEnabled = false;
+        updateMicButtonState();
+        const chatMessages = document.getElementById("chatMessages");
+        chatMessages.innerHTML = "";
+        try {
+          const response = await fetch(`${API_BASE}/messages/${sessionId}`);
+          if (response.ok) {
+            const data = await response.json();
+            data.messages.forEach((msg) => {
+              addMessageToChat(
+                msg.content,
+                msg.sender,
+                msg.references || [],
+                false
+              );
+            });
+          } else {
+            showNotification("Could not load chat history.", "error");
+          }
+        } catch (error) {
+          console.error("Error fetching chat history:", error);
+          showNotification("Error loading chat history.", "error");
+        }
+        const session = sessions.find((s) => s.session_id === sessionId);
+        if (!session || session.docs.length === 0) {
+          showUploadArea();
+        } else {
+          document.getElementById("uploadArea").style.display = "none";
+          document.getElementById("chatPanel").style.display = "flex";
+        }
+      }
+      function showUploadArea() {
+        const viewerArea = document.getElementById("viewerArea");
+        const uploadArea = document.getElementById("uploadArea");
+        const apryseViewer = document.getElementById("apryseViewer");
+        if (apryseViewer) apryseViewer.style.display = "none";
+        clearCustomViewers(viewerArea);
+        if (uploadArea) uploadArea.style.display = "block";
+        setupDragAndDrop();
+        if (document.getElementById("chatPanel"))
+          document.getElementById("chatPanel").style.display = "none";
+        if (document.getElementById("addDocsBtn") && !currentSession)
+          document.getElementById("addDocsBtn").style.display = "none";
+      }
+      async function createNewSession(callback) {
+        if (!currentUser) return;
+        const sessionName = prompt("Enter a name for the new session:");
+        if (!sessionName || sessionName.trim() === "") {
+          showNotification("Session name cannot be empty.", "error");
+          pendingUploadData = null;
+          return;
+        }
+        try {
+          const formData = new FormData();
+          formData.append("user_id", currentUser);
+          formData.append("session_name", sessionName);
+          const response = await fetch(`${API_BASE}/new_session`, {
+            method: "POST",
+            body: formData,
+          });
+          const newSessionData = await response.json();
+          if (response.ok) {
+            sessions.unshift(newSessionData);
+            await selectSession(newSessionData.session_id);
+            renderSessions();
+            if (typeof callback === "function") {
+              callback();
+            }
+          } else {
+            showNotification("Failed to create new session", "error");
+            pendingUploadData = null;
+          }
+        } catch (error) {
+          showNotification("Failed to create new session", "error");
+          pendingUploadData = null;
+        }
+      }
+      function promptForSessionAndUpload() {
+        createNewSession(() => {
+          if (pendingUploadData) {
+            if (pendingUploadData.type === "files") {
+              handleFileUpload(pendingUploadData.data, true);
+            } else if (pendingUploadData.type === "url") {
+              uploadFromUrl(pendingUploadData.data, true);
+            }
+            pendingUploadData = null;
+          }
+        });
+      }
+      async function handleFileUpload(files, skipSessionCheck = false) {
+        if (!files || !files.length) return;
+        if (!currentSession && !skipSessionCheck) {
+          pendingUploadData = { type: "files", data: files };
+          promptForSessionAndUpload();
+          return;
+        }
+        showNotification("Uploading files...", "info");
+        const formData = new FormData();
+        formData.append("session_id", currentSession);
+        for (let file of files) formData.append("files", file);
+        try {
+          const response = await fetch(`${API_BASE}/upload`, {
+            method: "POST",
+            body: formData,
+          });
+          const data = await response.json();
+          if (response.ok) {
+            showNotification("Files uploaded successfully!", "success");
+            await loadSessions();
+            if (data.doc_ids && data.doc_ids.length > 0) {
+              loadDocument(currentSession, data.doc_ids[0]);
+            }
+            document.getElementById("fileInput").value = "";
+            document.getElementById("modalFileInput").value = "";
+          } else {
+            showNotification(data.error || "Failed to upload files", "error");
+          }
+        } catch (error) {
+          showNotification("Upload failed. Check console.", "error");
+        }
+      }
+      async function uploadFromUrl(url, skipSessionCheck = false) {
+        if (!url) return showNotification("Please enter a URL.", "error");
+        if (!currentSession && !skipSessionCheck) {
+          pendingUploadData = { type: "url", data: url };
+          promptForSessionAndUpload();
+          return;
+        }
+        showNotification("Uploading from URL...", "info");
+        const formData = new FormData();
+        formData.append("session_id", currentSession);
+        formData.append("url", url);
+        try {
+          const response = await fetch(`${API_BASE}/upload`, {
+            method: "POST",
+            body: formData,
+          });
+          const data = await response.json();
+          if (response.ok) {
+            showNotification("URL content uploaded!", "success");
+            await loadSessions();
+            if (data.doc_ids && data.doc_ids.length > 0) {
+              loadDocument(currentSession, data.doc_ids[0]);
+            }
+            document.getElementById("urlInput").value = "";
+            document.getElementById("modalUrlInput").value = "";
+          } else {
+            showNotification(data.error || "Failed to upload URL", "error");
+          }
+        } catch (error) {
+          showNotification("Failed to upload URL. Check console.", "error");
+        }
+      }
+      function showViewerLoader() {
+        const viewerArea = document.getElementById("viewerArea");
+        hideViewerLoader();
+        const loader = document.createElement("div");
+        loader.className = "viewer-loading-overlay";
+        loader.innerHTML = `
+              <div class="spinner"></div>
+              <div class="loading-text">Loading Document...</div>
+          `;
+        viewerArea.appendChild(loader);
+      }
+      function hideViewerLoader() {
+        const loader = document.querySelector(".viewer-loading-overlay");
+        if (loader) {
+          loader.remove();
+        }
+      }
+      async function loadDocument(sessionId, docId) {
+        console.log(`Loading document: session=${sessionId}, doc=${docId}`);
+        showViewerLoader();
+        try {
+          documentTextCache.clear();
+          clearAllHighlights();
+          currentReferences = [];
+          currentSession = sessionId;
+          currentDocId = docId;
+          renderSessions();
+          const docIdInt = parseInt(docId);
+          const response = await fetch(
+            `${API_BASE}/get_doc/${sessionId}/${docIdInt}`
+          );
+          if (response.ok) {
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.includes("application/json")) {
+              const errorData = await response.json();
+              showNotification(
+                errorData.error || "Could not retrieve document.",
+                "error"
+              );
+              return;
+            }
+            const blob = await response.blob();
+            cleanupBlobUrl();
+            currentBlobUrl = URL.createObjectURL(blob);
+            const extension =
+              getFileExtensionFromContentType(contentType) || "bin";
+            await loadDocumentInViewer(currentBlobUrl, extension);
+            document.getElementById("chatPanel").style.display = "flex";
+          } else {
+            const errorText = await response.text();
+            console.error(
+              "Failed to load document:",
+              response.status,
+              errorText
+            );
+            showNotification("Failed to load document", "error");
+          }
+        } catch (error) {
+          console.error("Error loading document:", error);
+          showNotification("Failed to load document", "error");
+        } finally {
+          hideViewerLoader();
+        }
+      }
+      async function loadDocumentInViewer(documentUrl, extension) {
+        const viewerArea = document.getElementById("viewerArea");
+        const uploadArea = document.getElementById("uploadArea");
+        const apryseViewer = document.getElementById("apryseViewer");
+        if (uploadArea) uploadArea.style.display = "none";
+        clearCustomViewers(viewerArea);
+        const textBasedExtensions = [
+          "txt",
+          "csv",
+          "md",
+          "py",
+          "js",
+          "html",
+          "css",
+          "java",
+          "json",
+        ];
+        const supportedApryseExtensions = [
+          "pdf",
+          "docx",
+          "pptx",
+          "xlsx",
+          "doc",
+          "ppt",
+          "xls",
+          "txt",
+          "md",
+          "png",
+          "jpg",
+          "jpeg",
+        ];
+        const extLower = extension.toLowerCase();
+        if (textBasedExtensions.includes(extLower)) {
+          if (apryseViewer) apryseViewer.style.display = "none";
+          await showTextViewer(documentUrl, extLower, viewerArea);
+        } else if (
+          webviewerInstance &&
+          supportedApryseExtensions.includes(extLower)
+        ) {
+          if (apryseViewer) apryseViewer.style.display = "block";
+          try {
+            await webviewerInstance.UI.loadDocument(documentUrl, { extension });
+          } catch (error) {
+            console.error("Apryse WebViewer failed to load document:", error);
+            showNotification(
+              `Failed to preview document (${extension}).`,
+              "error"
+            );
+            showFallbackViewer(documentUrl, extension, viewerArea);
+          }
+        } else {
+          if (apryseViewer) apryseViewer.style.display = "none";
+          showNotification(
+            `Preview not available for .${extension} files.`,
+            "info"
+          );
+          showFallbackViewer(documentUrl, extension, viewerArea);
+        }
+      }
+      async function showTextViewer(documentUrl, extension, viewerArea) {
+        clearCustomViewers(viewerArea);
+        const textViewer = document.createElement("div");
+        textViewer.className = "custom-viewer text-viewer";
+        const pre = document.createElement("pre");
+        const code = document.createElement("code");
+        const langMap = {
+          py: "python",
+          js: "javascript",
+          java: "java",
+          html: "markup",
+          css: "css",
+          json: "json",
+          md: "markdown",
+          csv: "csv",
+        };
+        const lang = langMap[extension] || "plaintext";
+        code.className = `language-${lang}`;
+        try {
+          const response = await fetch(documentUrl);
+          const textContent = await response.text();
+          code.textContent = textContent;
+          pre.appendChild(code);
+          textViewer.appendChild(pre);
+          viewerArea.appendChild(textViewer);
+          if (window.Prism) {
+            Prism.highlightElement(code);
+          }
+        } catch (error) {
+          console.error("Failed to load text content:", error);
+          textViewer.innerHTML = "<h3>Failed to load text content.</h3>";
+          viewerArea.appendChild(textViewer);
+        }
+      }
+      function clearCustomViewers(viewerArea) {
+        viewerArea
+          .querySelectorAll(".custom-viewer")
+          .forEach((el) => el.remove());
+      }
+      function showFallbackViewer(documentUrl, extension, viewerArea) {
+        clearCustomViewers(viewerArea);
+        const fallbackViewer = document.createElement("div");
+        fallbackViewer.className = "custom-viewer";
+        fallbackViewer.style.cssText =
+          "width: 100%; height: 100%; padding: 2rem; display: flex; justify-content: center; align-items: center; text-align: center;";
+        let fallbackHTML = `<h3>Preview for .${extension} files is not supported.</h3>`;
+        if (["jpg", "jpeg", "png", "gif"].includes(extension.toLowerCase())) {
+          fallbackHTML = `<img src="${documentUrl}" style="max-width: 100%; max-height: 100%; object-fit: contain;">`;
+        }
+        fallbackViewer.innerHTML = fallbackHTML;
+        viewerArea.appendChild(fallbackViewer);
+      }
+      function getFileExtensionFromContentType(contentType) {
+        const mainType = (contentType || "").split(";")[0].trim();
+        const typeMap = {
+          "application/pdf": "pdf",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            "docx",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+            "xlsx",
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+            "pptx",
+          "application/msword": "doc",
+          "application/vnd.ms-excel": "xls",
+          "application/vnd.ms-powerpoint": "ppt",
+          "text/plain": "txt",
+          "text/markdown": "md",
+          "image/jpeg": "jpg",
+          "image/png": "png",
+          "text/csv": "csv",
+          "text/html": "html",
+          "text/css": "css",
+          "application/javascript": "js",
+          "application/json": "json",
+          "text/x-python": "py",
+          "text/x-java-source": "java",
+        };
+        return typeMap[mainType] || null;
+      }
+      function cleanupBlobUrl() {
+        if (currentBlobUrl) {
+          URL.revokeObjectURL(currentBlobUrl);
+          currentBlobUrl = null;
+        }
+      }
+      async function handleReferenceClick(referenceData, iconElement) {
+        clearAllHighlights();
+        document
+          .querySelectorAll(".reference-icon")
+          .forEach((icon) => icon.classList.remove("active"));
+        iconElement.classList.add("active");
+        showHighlightStatus("Searching for reference...", "searching");
+        try {
+          let targetDocId = referenceData.doc_id;
+          if (String(targetDocId) === "-1") {
+            const session = sessions.find(
+              (s) => s.session_id === currentSession
+            );
+            if (session && session.docs.length > 0) {
+              targetDocId = session.docs[0];
+            } else {
+              showHighlightStatus(
+                "Session has no documents to search for reference.",
+                "error"
+              );
+              iconElement.classList.remove("active");
+              return;
+            }
+          }
+          if (String(currentDocId) !== String(targetDocId)) {
+            await loadDocument(currentSession, targetDocId);
+          }
+          const matchResult = await findReferenceInDocument(
+            referenceData.text_snippet,
+            targetDocId,
+            referenceData.page_number
+          );
+          if (matchResult) {
+            const highlightId = await highlightTextInDocument(matchResult);
+            if (highlightId) {
+              showHighlightStatus(
+                `Reference found on page ${matchResult.pageNumber}`,
+                "success"
+              );
+            } else {
+              showHighlightStatus(
+                "Reference found but could not highlight",
+                "error"
+              );
+            }
+          } else {
+            showHighlightStatus(
+              "Reference text not found in document",
+              "error"
+            );
+          }
+        } catch (error) {
+          console.error("Error handling reference click:", error);
+          showHighlightStatus("Error searching for reference", "error");
+        }
+      }
+      async function findReferenceInDocument(referenceText, docId, pageNumber) {
+        if (
+          !webviewerInstance ||
+          !webviewerInstance.Core.documentViewer.getDocument()
+        )
+          return null;
+        const { documentViewer } = webviewerInstance.Core;
+        const doc = documentViewer.getDocument();
+        const pageCount = documentViewer.getPageCount();
+        const searchPages = [pageNumber];
+        for (let i = 1; i <= 3; i++) {
+          if (pageNumber + i <= pageCount) {
+            searchPages.push(pageNumber + i);
+          }
+        }
+        for (const pageNum of new Set(searchPages)) {
+          try {
+            const pageText = await getPageText(pageNum);
+            if (!pageText) continue;
+            const match = fuzzyMatch(pageText, referenceText);
+            if (match) {
+              console.log(
+                `Fuzzy match found on page ${pageNum}. Getting text position...`
+              );
+              const quads = await doc.getTextPosition(
+                pageNum,
+                match.start,
+                match.end
+              );
+              if (quads && quads.length > 0) {
+                console.log("Successfully retrieved quads for fuzzy match.");
+                return { pageNumber: pageNum, quads, method: "fuzzy_accurate" };
+              } else {
+                console.warn(
+                  `Fuzzy match found on page ${pageNum}, but could not get text position.`
+                );
+              }
+            }
+          } catch (error) {
+            console.error(
+              `Error during fuzzy search on page ${pageNum}:`,
+              error
+            );
+          }
+        }
+        console.log(
+          "Reference text not found in document after all search attempts."
+        );
+        return null;
+      }
+      async function getPageText(pageNum) {
+        if (!webviewerInstance) return "";
+        const cacheKey = `${currentSession}_${currentDocId}_${pageNum}`;
+        if (documentTextCache.has(cacheKey))
+          return documentTextCache.get(cacheKey);
+        try {
+          const doc = webviewerInstance.Core.documentViewer.getDocument();
+          const text = await doc.loadPageText(pageNum);
+          documentTextCache.set(cacheKey, text);
+          return text;
+        } catch (error) {
+          console.error(`Failed to get text for page ${pageNum}`, error);
+          return "";
+        }
+      }
+      function fuzzyMatch(text, target, threshold = 0.7) {
+        const normalize = (str) =>
+          str.replace(/\s+/g, " ").trim().toLowerCase();
+        const nText = normalize(text);
+        const nTarget = normalize(target);
+        if (nText.includes(nTarget)) {
+          const index = nText.indexOf(nTarget);
+          return { start: index, end: index + nTarget.length, match: nTarget };
+        }
+        return null;
+      }
+      function clearAllHighlights() {
+        if (!webviewerInstance || !currentHighlights.length) return;
+        const { annotationManager } = webviewerInstance.Core;
+        const annotations = currentHighlights
+          .map((id) => annotationManager.getAnnotationById(id))
+          .filter(Boolean);
+        if (annotations.length > 0) {
+          annotationManager.deleteAnnotations(annotations);
+        }
+        currentHighlights = [];
+      }
+      function showHighlightStatus(message, type = "info") {
+        const existingStatus = document.querySelector(".highlight-status");
+        if (existingStatus) existingStatus.remove();
+        const status = document.createElement("div");
+        status.className = `highlight-status ${type}`;
+        status.textContent = message;
+        document.body.appendChild(status);
+        setTimeout(() => status.classList.add("show"), 100);
+        setTimeout(() => {
+          status.classList.remove("show");
+          setTimeout(() => {
+            if (status.parentElement) status.remove();
+          }, 300);
+        }, 3000);
+      }
+      function createReferenceIcon(referenceData, index) {
+        const icon = document.createElement("span");
+        icon.className = "reference-icon";
+        const tooltipText = `Page ${referenceData.page_number}: "${referenceData.text_snippet}"`;
+        icon.title = tooltipText;
+        icon.innerHTML = `${
+          index + 1
+        }<div class="reference-tooltip">${tooltipText}</div>`;
+        icon.addEventListener("click", (e) => {
+          e.stopPropagation();
+          handleReferenceClick(referenceData, icon);
+        });
+        return icon;
+      }
+      async function sendMessage() {
+        const input = document.getElementById("chatInput");
+        const message = input.value.trim();
+        if (
+          !message ||
+          !currentSession ||
+          document.getElementById("sendBtn").disabled
+        )
+          return;
+        const sendBtn = document.getElementById("sendBtn");
+        sendBtn.disabled = true;
+        clearAllHighlights();
+        currentReferences = [];
+        addMessageToChat(message, "user");
+        input.value = "";
+        input.style.height = "auto";
+        try {
+          const response = await fetch(`${API_BASE}/query`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              session_id: currentSession,
+              question: message,
+            }),
+          });
+          const data = await response.json();
+          if (response.ok && data.answer_parts) {
+            let fullAnswer = "";
+            let allReferences = [];
+            data.answer_parts.forEach((part) => {
+              fullAnswer += part.text;
+              if (part.references) allReferences.push(...part.references);
+            });
+            addMessageToChat(fullAnswer, "assistant", allReferences, true);
+            await loadSessions();
+          } else {
+            addMessageToChat(
+              data.error || "Sorry, I encountered an error.",
+              "assistant"
+            );
+          }
+        } catch (error) {
+          console.error("Error sending message:", error);
+          addMessageToChat("Sorry, I encountered an error.", "assistant");
+        } finally {
+          sendBtn.disabled = false;
+        }
+      }
+      function addMessageToChat(
+        message,
+        sender,
+        references = [],
+        shouldSpeak = false
+      ) {
+        const chatMessages = document.getElementById("chatMessages");
+        const messageElement = document.createElement("div");
+        messageElement.className = `message ${sender}`;
+        const messageText = document.createElement("md-block");
+        messageText.className = "message-text";
+        messageText.innerText = message;
+        messageElement.appendChild(messageText);
+        if (sender === "assistant" && references && references.length > 0) {
+          currentReferences = references;
+          const referencesContainer = document.createElement("div");
+          referencesContainer.style.cssText =
+            "margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px;";
+          references.forEach((ref, index) => {
+            referencesContainer.appendChild(createReferenceIcon(ref, index));
+          });
+          messageElement.appendChild(referencesContainer);
+        }
+        chatMessages.appendChild(messageElement);
+        if (sender === "assistant" && isSpeechOutputEnabled && shouldSpeak) {
+          speakText(message, references);
+        }
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+      function setupDragAndDrop() {
+        const uploadArea = document.getElementById("uploadArea");
+        if (!uploadArea) return;
+        ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+          uploadArea.addEventListener(
+            eventName,
+            (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            },
+            false
+          );
+        });
+        ["dragenter", "dragover"].forEach((eventName) => {
+          uploadArea.addEventListener(
+            eventName,
+            () => {
+              uploadArea.style.borderColor = "var(--accent-color)";
+              uploadArea.style.background = "rgba(0, 255, 255, 0.1)";
+            },
+            false
+          );
+        });
+        ["dragleave", "drop"].forEach((eventName) => {
+          uploadArea.addEventListener(
+            eventName,
+            () => {
+              uploadArea.style.borderColor = "rgba(75, 85, 99, 0.5)";
+              uploadArea.style.background = "var(--panel-bg)";
+            },
+            false
+          );
+        });
+        uploadArea.addEventListener(
+          "drop",
+          (e) => {
+            handleFileUpload(e.dataTransfer.files);
+          },
+          false
+        );
+      }
+      function initializeSpeechServices() {
+        try {
+          const savedWakeWord = localStorage.getItem("userWakeWord");
+          if (savedWakeWord) wakeWord = savedWakeWord;
+        } catch (e) {
+          console.warn("Could not access localStorage for wake word.");
+        }
+        const SpeechRecognition =
+          window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+          console.warn("Speech Recognition API not supported.");
+          document.getElementById("micBtn").disabled = true;
+          document.getElementById("micBtn").title =
+            "Voice commands not supported.";
+          document.getElementById("settingsBtn").disabled = true;
+          return;
+        }
+        speechRecognition = new SpeechRecognition();
+        speechRecognition.continuous = true;
+        speechRecognition.interimResults = true;
+        speechRecognition.lang = "en-US";
+        speechRecognition.onresult = handleSpeechResult;
+        speechRecognition.onerror = (event) =>
+          console.error("Speech recognition error:", event.error);
+        speechRecognition.onend = handleSpeechEnd;
+        if (!("speechSynthesis" in window)) {
+          console.warn("Speech Synthesis API not supported.");
+          document.getElementById("toggleSpeechBtn").disabled = true;
+        }
+      }
+      function handleMicButtonPress() {
+        micPressTimer = setTimeout(() => {
+          startPushToTalk();
+          micPressTimer = null;
+        }, longPressThreshold);
+      }
+      function handleMicButtonRelease() {
+        if (micPressTimer) {
+          clearTimeout(micPressTimer);
+          micPressTimer = null;
+          toggleMic();
+        } else if (isPushToTalkActive) {
+          stopPushToTalk();
+        }
+      }
+      function toggleMic() {
+        isMicEnabled = !isMicEnabled;
+        if (isMicEnabled) {
+          startWakeWordListening();
+        } else {
+          stopVoiceServices();
+        }
+        updateMicButtonState();
+      }
+      function toggleSpeechOutput() {
+        isSpeechOutputEnabled = !isSpeechOutputEnabled;
+        if (!isSpeechOutputEnabled) {
+          window.speechSynthesis.cancel();
+        }
+        updateSpeechButtonState();
+      }
+      function setWakeWord() {
+        const newWakeWord = prompt(
+          "Enter a new wake phrase (e.g., 'hey assistant'):",
+          wakeWord
+        );
+        if (newWakeWord && newWakeWord.trim()) {
+          wakeWord = newWakeWord.trim().toLowerCase();
+          try {
+            localStorage.setItem("userWakeWord", wakeWord);
+            showNotification(`Wake word set to "${wakeWord}"`, "success");
+          } catch (e) {
+            showNotification("Could not save wake word.", "error");
+          }
+          updateMicButtonState();
+          if (isMicEnabled) {
+            stopVoiceServices();
+            startWakeWordListening();
+          }
+        }
+      }
+      function startWakeWordListening() {
+        if (!speechRecognition || !currentSession) {
+          isMicEnabled = false;
+          updateMicButtonState();
+          showNotification(
+            "Please select a session to use voice commands.",
+            "error"
+          );
+          return;
+        }
+        console.log(`Listening for wake word: "${wakeWord}"`);
+        isRecording = true;
+        showNotification(`Listening for "${wakeWord}"`, "info");
+        try {
+          speechRecognition.start();
+        } catch (e) {
+          console.error("Speech recognition could not start:", e);
+          stopVoiceServices();
+        }
+      }
+      function startPushToTalk(event) {
+        if (isRecording) return;
+        isPushToTalkActive = true;
+        isRecording = true;
+        console.log("Push-to-talk started.");
+        document.getElementById("chatInput").value = "";
+        document.getElementById("chatInput").placeholder = "Listening...";
+        updateMicButtonState();
+        try {
+          speechRecognition.start();
+        } catch (e) {
+          console.error("PTT start failed:", e);
+          stopVoiceServices();
+        }
+      }
+      function stopPushToTalk() {
+        if (!isPushToTalkActive) return;
+        console.log("Push-to-talk stopped.");
+        if (silenceTimer) clearTimeout(silenceTimer);
+        if (isRecording) {
+          speechRecognition.stop();
+        }
+      }
+      function stopVoiceServices() {
+        console.log("Stopping voice services.");
+        if (speechRecognition) {
+          speechRecognition.stop();
+        }
+        if (silenceTimer) clearTimeout(silenceTimer);
+        window.speechSynthesis.cancel();
+        isRecording = false;
+        isMicEnabled = false;
+        isPushToTalkActive = false;
+        updateMicButtonState();
+        document.getElementById("chatInput").placeholder = "Ask a question...";
+      }
+      function handleSpeechResult(event) {
+        if (silenceTimer) {
+          clearTimeout(silenceTimer);
+        }
+        let fullTranscript = "";
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          fullTranscript += event.results[i][0].transcript;
+        }
+        if (
+          !isPushToTalkActive &&
+          !fullTranscript.toLowerCase().includes(wakeWord)
+        ) {
+          return;
+        }
+        let question = fullTranscript;
+        if (!isPushToTalkActive) {
+          const wakeWordIndex = question.toLowerCase().indexOf(wakeWord);
+          if (wakeWordIndex !== -1) {
+            question = question
+              .substring(wakeWordIndex + wakeWord.length)
+              .trim();
+          }
+        }
+        document.getElementById("chatInput").value = question;
+        if (question && isMicEnabled && !isPushToTalkActive) {
+          silenceTimer = setTimeout(() => {
+            console.log(
+              "Silence detected via timer. Stopping recognition to send."
+            );
+            if (isRecording) {
+              speechRecognition.stop();
+            }
+          }, silenceTimeoutDuration);
+        }
+      }
+      function handleSpeechEnd() {
+        if (!isRecording) return;
+        console.log("Speech recognition ended.");
+        isRecording = false;
+        const wasPushToTalk = isPushToTalkActive;
+        isPushToTalkActive = false;
+        const query = document.getElementById("chatInput").value.trim();
+        document.getElementById("chatInput").placeholder = "Ask a question...";
+        if (query) {
+          sendMessage();
+        }
+        if (isMicEnabled && !wasPushToTalk) {
+          startWakeWordListening();
+        } else {
+          updateMicButtonState();
+        }
+      }
+      function updateMicButtonState() {
+        const micBtn = document.getElementById("micBtn");
+        micBtn.classList.remove("active", "recording");
+        if (isPushToTalkActive) {
+          micBtn.classList.add("recording");
+          micBtn.title = "Release to send query";
+        } else if (isMicEnabled) {
+          micBtn.classList.add("active");
+          micBtn.title = `Wake word mode is ON. Say "${wakeWord}" to ask. Click to disable.`;
+        } else {
+          micBtn.title = "Click to enable wake word mode, or hold to talk.";
+        }
+      }
+      function updateSpeechButtonState() {
+        const speechBtn = document.getElementById("toggleSpeechBtn");
+        const speakerOn = speechBtn.querySelector(".speaker-on");
+        const speakerOff = speechBtn.querySelector(".speaker-off");
+        if (isSpeechOutputEnabled) {
+          speechBtn.classList.add("active");
+          speechBtn.title = "Speech Output is ON";
+          speakerOn.style.display = "block";
+          speakerOff.style.display = "none";
+        } else {
+          speechBtn.classList.remove("active");
+          speechBtn.title = "Speech Output is OFF";
+          speakerOn.style.display = "none";
+          speakerOff.style.display = "block";
+        }
+      }
+      async function speakText(text, references = []) {
+        if (!("speechSynthesis" in window)) return;
+        window.speechSynthesis.cancel();
+        currentSpokenReferenceIndex = -1;
+        const utterance = new SpeechSynthesisUtterance(text);
+        const referencePositions = references
+          .map((ref, index) => {
+            const cleanText = text
+              .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "")
+              .replace(/\s{2,}/g, " ");
+            const cleanSnippet = ref.text_snippet
+              .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "")
+              .replace(/\s{2,}/g, " ");
+            const startIndex = cleanText.indexOf(cleanSnippet);
+            if (startIndex === -1) return null;
+            return {
+              start: startIndex,
+              end: startIndex + cleanSnippet.length,
+              refData: ref,
+              refIcon: document.querySelector(
+                `.message.assistant:last-child .reference-icon:nth-of-type(${
+                  index + 1
+                })`
+              ),
+            };
+          })
+          .filter((p) => p !== null);
+        utterance.onboundary = async (event) => {
+          if (event.name === "word") {
+            const charIndex = event.charIndex;
+            const activeRef = referencePositions.find(
+              (p) => charIndex >= p.start && charIndex < p.end
+            );
+            const activeRefIndex = referencePositions.indexOf(activeRef);
+            if (activeRef && activeRefIndex !== currentSpokenReferenceIndex) {
+              currentSpokenReferenceIndex = activeRefIndex;
+              console.log(
+                `Highlighting reference for: "${activeRef.refData.text_snippet}"`
+              );
+              if (activeRef.refIcon) {
+                await handleReferenceClick(
+                  activeRef.refData,
+                  activeRef.refIcon
+                );
+              }
+            }
+          }
+        };
+        utterance.onend = () => {
+          console.log("Speech finished.");
+          clearAllHighlights();
+          currentSpokenReferenceIndex = -1;
+          document
+            .querySelectorAll(".reference-icon")
+            .forEach((icon) => icon.classList.remove("active"));
+        };
+        window.speechSynthesis.speak(utterance);
+      }
+      function showNotification(message, type = "info") {
+        const notification = document.createElement("div");
+        const colors = {
+          success: "rgba(34, 197, 94, 0.9)",
+          error: "rgba(239, 68, 68, 0.9)",
+          info: "rgba(59, 130, 246, 0.9)",
+        };
+        notification.style.cssText = `position: fixed; top: 20px; right: 20px; padding: 1rem 1.5rem; background: ${colors[type]}; color: white; border-radius: 8px; z-index: 1002; backdrop-filter: blur(10px); box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3); transform: translateX(400px); transition: transform 0.3s ease; max-width: 300px;`;
+        notification.textContent = message;
+        document.body.appendChild(notification);
+        setTimeout(() => {
+          notification.style.transform = "translateX(0)";
+        }, 100);
+        setTimeout(() => {
+          notification.style.transform = "translateX(400px)";
+          setTimeout(() => {
+            if (notification.parentElement) notification.remove();
+          }, 300);
+        }, 3000);
+      }
+    </script>
+  </body>
+</html>
