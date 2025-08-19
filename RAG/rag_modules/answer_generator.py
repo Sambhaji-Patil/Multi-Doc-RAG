@@ -1,3 +1,10 @@
+from typing import List
+from LLM.llm_handler import llm_handler
+from config.config import TEMPERATURE, MAX_TOKENS
+from logger.custom_logger import CustomLogger
+
+# module logger
+logger = CustomLogger().get_logger(__file__)
 """
 Answer Generation Module for Advanced RAG
 Handles LLM-based answer generation with enhanced prompting.
@@ -14,7 +21,7 @@ class AnswerGenerator:
     def __init__(self):
         """Initialize the answer generator."""
         self.llm_handler = llm_handler
-        print("🟢-> Answer Generator initialized")
+    logger.info("Answer Generator initialized")
     
     async def generate_enhanced_answer(self, original_question: str, context: str, expanded_queries: List[str]) -> str:
         """Generate enhanced answer using the original question with retrieved context."""
@@ -27,7 +34,6 @@ class AnswerGenerator:
 You are an expert AI assistant specializing in document analysis and policy-related question answering. You have access to relevant document excerpts and must respond only based on this information. You are designed specifically for analyzing official documents and answering user queries related to them.
 
 STRICT RULES AND RESPONSE CONDITIONS:
-
     Irrelevant/Out-of-Scope Queries (e.g., programming help, general product info, coding tasks):
     Respond EXACTLY:
 
@@ -111,5 +117,5 @@ Provide a comprehensive answer based on the document excerpts above:"""
             return answer.strip(), provider, instance
             
         except Exception as e:
-            print(f"🔴-> Error generating enhanced")
+            logger.exception("Error generating enhanced", error=str(e))
             return "I encountered an error while generating the response.", "None", "None" 

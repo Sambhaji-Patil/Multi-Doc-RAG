@@ -20,6 +20,11 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
+from logger.custom_logger import CustomLogger
+
+# module logger
+logger = CustomLogger().get_logger(__file__)
+
 
 # BEARER_TOKEN = os.getenv("BEARER_TOKEN")
 
@@ -159,7 +164,7 @@ async def scrape_url_fastapi_compatible(url: str, max_chars: int = 3000) -> Dict
             }
             
     except httpx.TimeoutException:
-        print(f"⏰ Timeout scraping {url}")
+        logger.warning("Timeout scraping URL", url=url)
         return {
             'url': url,
             'content': "Timeout error - could not retrieve content",
@@ -168,7 +173,7 @@ async def scrape_url_fastapi_compatible(url: str, max_chars: int = 3000) -> Dict
             'title': 'Timeout'
         }
     except Exception as e:
-        print(f"❌ Error scraping {url}: {str(e)[:100]}")
+        logger.error("Error scraping URL", url=url, error=str(e)[:100])
         return {
             'url': url,
             'content': f"Error retrieving content: {str(e)[:100]}",
@@ -182,7 +187,7 @@ async def scrape_urls_fastapi(urls: List[str], max_chars: int = 3000) -> List[Di
     if not urls:
         return []
     
-    print(f"🚀 Scraping {len(urls)} URLs (FastAPI compatible)...")
+    logger.info("Scraping URLs (FastAPI compatible)", url_count=len(urls))
     
     # Limit concurrent requests to avoid overwhelming servers
     semaphore = asyncio.Semaphore(7)
@@ -198,7 +203,7 @@ async def scrape_urls_fastapi(urls: List[str], max_chars: int = 3000) -> List[Di
     processed_results = []
     for i, result in enumerate(results):
         if isinstance(result, Exception):
-            print(f"❌ Exception scraping {urls[i]}: {result}")
+            logger.error("Exception scraping URL", url=urls[i], error=str(result))
             processed_results.append({
                 'url': urls[i],
                 'content': f"Exception occurred: {str(result)[:100]}",
@@ -210,7 +215,7 @@ async def scrape_urls_fastapi(urls: List[str], max_chars: int = 3000) -> List[Di
             processed_results.append(result)
     
     successful = sum(1 for r in processed_results if r['status'] == 'success')
-    print(f"✅ Scraping complete: {successful}/{len(urls)} successful")
+    logger.info("Scraping complete", successful=successful, total=len(urls))
     return processed_results
 
 # search function
@@ -242,11 +247,11 @@ async def search_web_async(query: str, num_results: int = 3) -> List[Dict[str, s
                 'snippet': data.get('Answer', '')
             })
         
-        print(f"🔍 Found {len(results)} search results for: {query}")
+        logger.info("Found search results", query=query, results_count=len(results))
         return results
         
     except Exception as e:
-        print(f"❌ Search error for '{query}': {e}")
+        logger.error("Search error", query=query, error=str(e))
         return []
 
 # Enhanced assessment functions with better prompts
@@ -310,11 +315,11 @@ Respond in this EXACT JSON format:
             else:
                 raise ValueError("Could not parse JSON response")
         
-        print(f"🔗 Link assessment: {len(result.relevant_links)} relevant, can answer: {result.can_answer_without_links}")
+        logger.info("Link assessment", relevant_count=len(result.relevant_links), can_answer=result.can_answer_without_links)
         return result
-        
+
     except Exception as e:
-        print(f"❌ Link assessment error: {e}")
+        logger.error("Link assessment error", error=str(e))
         # Conservative fallback
         return LinkRelevanceAssessment(
             relevant_links=[{"url": url, "reason": "Included due to assessment error"} for url in found_urls[:3]],
@@ -374,11 +379,11 @@ Respond in this EXACT JSON format:
             else:
                 raise ValueError("Could not parse JSON response")
         
-        print(f"🔍 Search assessment: needs_search={result.needs_web_search}, confidence={result.confidence_score}")
+        logger.info("Search assessment", needs_search=result.needs_web_search, confidence=result.confidence_score)
         return result
         
     except Exception as e:
-        print(f"❌ Search assessment error: {e}")
+        logger.error("Search assessment error", error=str(e))
         # Conservative fallback
         return SearchNeedAssessment(
             needs_web_search=True,
@@ -390,18 +395,18 @@ Respond in this EXACT JSON format:
 
 def generate_answers_enhanced(context: str, questions: List[str]) -> List[str]:
     """Enhanced answer generation with better content utilization"""
-    
+
     try:
         llm = get_gemini_llm(temperature=0.7)
-        
-        # Debug: Print context summary to verify content is there
-        print(f"📄 Context length: {len(context)} chars")
+
+        # Debug: log context summary to verify content is there
+        logger.info("Context length", chars=len(context))
         if "Additional Information:" in context:
             additional_start = context.find("Additional Information:")
-            print(f"🔍 Additional info found at position {additional_start}")
+            logger.info("Additional info found", position=additional_start)
             additional_content = context[additional_start:additional_start+500]
-            print(f"📝 Sample additional content: {additional_content[:200]}...")
-        
+            logger.debug("Sample additional content", preview=additional_content[:200])
+
         prompt = ChatPromptTemplate.from_messages([
             ("human", """You are an expert research assistant. You must analyze ALL provided context thoroughly and use EVERY relevant piece of information to answer the questions comprehensively.
 
@@ -432,7 +437,7 @@ USE ALL OF THESE SECTIONS TO PROVIDE COMPLETE ANSWERS.
 Respond in this EXACT JSON format:
 {{
     "answers": [
-        "<Correct Answer to the question 1{doc_id: "doc_fcebebab243d", page_num: "2", reference: "reference string"} answer continued>",
+        "<Correct Answer to the question 1{doc_id: \"doc_fcebebab243d\", page_num: \"2\", reference: \"reference string\"} answer continued>",
         "<Correct Answer to the question 2 only if question 2 exists.>",
         ...
     ]
@@ -443,9 +448,9 @@ QUESTIONS TO ANSWER:
 {questions}
         """)
         ])
-        
+
         questions_text = "\n".join([f"{i+1}. {q.strip()}" for i, q in enumerate(questions)])
-        
+
         # Ensure we're passing the full context
         full_context = context
         if len(full_context) > 8000:  # Truncate if too long but keep important parts
@@ -456,40 +461,40 @@ QUESTIONS TO ANSWER:
                 full_context = full_context[:original_end] + additional_part
             else:
                 full_context = full_context[:8000]
-        
-        print(f"📤 Sending {len(full_context)} chars to LLM")
-        
+
+        logger.info("Sending context to LLM", chars=len(full_context))
+
         response = llm.invoke(prompt.format_messages(
             context=full_context,
             questions=questions_text
         ))
-        
-        print(f"📥 LLM response length: {len(response.content)}")
-        print(f"📝 Response preview: {response.content[:300]}...")
-        
+
+        logger.info("LLM response received", length=len(response.content))
+        logger.debug("LLM response preview", preview=response.content[:300])
+
         # Parse JSON response with better error handling
         import json
+        import re
         try:
             # Try direct JSON parsing first
             result_dict = json.loads(response.content)
             result = FinalAnswer(**result_dict)
         except json.JSONDecodeError:
             # Try to extract JSON from response
-            import re
             json_match = re.search(r'\{.*"answers".*\}', response.content, re.DOTALL)
             if json_match:
                 try:
                     result_dict = json.loads(json_match.group())
                     result = FinalAnswer(**result_dict)
-                except:
+                except Exception:
                     # Extract answers array specifically
-                    print("Answer was not in proper JSON")
+                    logger.warning("Answer was not in proper JSON")
                     answers_match = re.search(r'"answers"\s*:\s*\[(.*?)\]', response.content, re.DOTALL)
                     if answers_match:
                         answers_text = answers_match.group(1)
                         # Split by quotes and clean
                         answers = []
-                        for part in answers_text.split('",'):
+                        for part in answers_text.split('\",'):
                             clean_answer = part.strip().strip('"').strip(',').strip()
                             if clean_answer and len(clean_answer) > 10:
                                 answers.append(clean_answer)
@@ -498,51 +503,51 @@ QUESTIONS TO ANSWER:
                         raise ValueError("Could not extract answers")
             else:
                 # Last resort - split response by questions
-                lines = response.content.split('\n') if len(questions) > 1 else response.content
+                lines = response.content.split('\n') if len(questions) > 1 else [response.content]
                 answers = []
                 current_answer = ""
-                
+
                 for line in lines:
                     line = line.strip()
                     if not line or line.startswith('{') or line.startswith('}') or line.startswith('"answers"'):
                         continue
-                    
+
                     # Check if this looks like a new answer
-                    if (line.startswith('"') or 
-                        any(f"{i+1}." in line for i in range(len(questions))) or
-                        (current_answer and len(line) > 50 and line[0].isupper())):
+                    if (
+                        line.startswith('"')
+                        or any(f"{i+1}." in line for i in range(len(questions)))
+                        or (current_answer and len(line) > 50 and line[0].isupper())
+                    ):
                         if current_answer and len(current_answer) > 20:
                             answers.append(current_answer.strip().strip('"').strip(','))
                         current_answer = line.strip('"').strip(',')
                     else:
                         current_answer += " " + line.strip('"').strip(',')
-                
+
                 if current_answer and len(current_answer) > 2:
                     answers.append(current_answer.strip().strip('"').strip(','))
-                
+
                 # Ensure we have the right number of answers
                 while len(answers) < len(questions):
                     answers.append(f"Unable to generate answer for question {len(answers)+1}")
                 if len(questions) == len(answers):
                     answers = ["\n".join(answers)]
-                
+
                 result = FinalAnswer(answers=answers[:len(questions)])
-        
-        print(f"✅ Generated {len(result.answers)} answers")
-        
+
+        logger.info("Generated answers", count=len(result.answers))
+
         return result.answers
-        
+
     except Exception as e:
-        print(f"❌ Answer generation error: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Answer generation error", error=str(e))
         return [f"Error generating answer for question {i+1}: {str(e)[:100]}" for i in range(len(questions))]
 
 # Debug function to verify content integration
 async def debug_qa_process(context: str, questions: List[str]) -> Dict:
     """Debug version that returns detailed process information"""
     
-    print("🔍 Starting debug QA process...")
+    logger.info("Starting debug QA process")
     
     # Extract URLs
     found_urls = extract_urls_from_text(context + "\n" + "\n".join(questions))
@@ -609,23 +614,23 @@ async def get_oneshot_answer(context: str, questions: List[str]) -> List[str]:
     """Main FastAPI-compatible QA function"""
     
     start_time = time.time()
-    print(f"🚀 FastAPI QA: {len(questions)} questions, {len(context)} chars")
+    logger.info("FastAPI QA start", questions=len(questions), chars=len(context))
     
     # Step 1: Extract URLs
     combined_text = context + "\n" + "\n".join(questions)
     found_urls = extract_urls_from_text(combined_text)
     
-    print(f"🔗 Found {len(found_urls)} URLs")
+    logger.info("Found URLs", count=len(found_urls))
     
     should_scrape_links = len(found_urls) > 0
     
-    print(f"📊 Strategy: scrape_links={should_scrape_links}")
+    logger.info("Strategy", scrape_links=should_scrape_links)
     
     # Step 4: Early return if sufficient context
     if not should_scrape_links:
-        print("✅ Sufficient context, generating answers...")
+        logger.info("Sufficient context, generating answers")
         answers = generate_answers_enhanced(context, questions)
-        print(f"⚡ Completed in {time.time() - start_time:.2f}s")
+        logger.info("Completed FastAPI QA", elapsed_seconds=round(time.time() - start_time, 2))
         return answers
     
     # Step 5: Gather additional content
@@ -633,11 +638,11 @@ async def get_oneshot_answer(context: str, questions: List[str]) -> List[str]:
     
     # Step 6: Scrape URLs
     additional_content = ""
+    successful_scrapes = 0
     if all_urls:
-        print(f"🚀 Scraping {len(all_urls)} URLs...")
+        logger.info("Scraping URLs for FastAPI QA", url_count=len(all_urls))
         scrape_results = await scrape_urls_fastapi(all_urls, max_chars=4000)
         
-        successful_scrapes = 0
         for i, result in enumerate(scrape_results):
             if result['status'] == 'success':
                 metadata = "Additional Source"
@@ -652,36 +657,30 @@ async def get_oneshot_answer(context: str, questions: List[str]) -> List[str]:
                 successful_scrapes += 1
                 
                 # Debug output
-                print(f"✅ Scraped: {result['url']}")
-                print(f"   Title: {result.get('title', 'No title')}")
-                print(f"   Content length: {result['length']} chars")
-                print(f"   Content preview: {result['content'][:100]}...")
+                logger.info("Scraped URL", url=result['url'], title=result.get('title', 'No title'), length=result['length'])
+                logger.debug("Scraped content preview", preview=result['content'][:100])
         
-        print(f"📄 Successfully scraped {successful_scrapes}/{len(all_urls)} sources")
-        print(f"🔍 Total additional content: {len(additional_content)} chars")
+    logger.info("Scraping summary", successful=successful_scrapes, total=len(all_urls))
+    logger.info("Total additional content", chars=len(additional_content))
     
     # Step 7: Generate final answers with better context integration
     if additional_content:
-        print(f"🔗 Integrating additional content...")
+        logger.info("Integrating additional content")
         final_context = context + f"\n\nADDITIONAL INFORMATION FROM SCRAPED SOURCES:\n{additional_content}"
-        print(f"📊 Final context stats:")
-        print(f"   - Original context: {len(context)} chars")
-        print(f"   - Additional content: {len(additional_content)} chars") 
-        print(f"   - Total context: {len(final_context)} chars")
-        
+        logger.info("Final context stats", original_chars=len(context), additional_chars=len(additional_content), total_chars=len(final_context))
         # Verify the content is properly formatted
         if "ADDITIONAL INFORMATION FROM SCRAPED SOURCES:" in final_context:
-            print("✅ Additional content properly integrated")
+            logger.info("Additional content properly integrated")
         else:
-            print("❌ Additional content integration failed")
+            logger.warning("Additional content integration failed")
     else:
-        print("⚠️  No additional content to integrate")
+        logger.warning("No additional content to integrate")
         final_context = context
     
     answers = generate_answers_enhanced(final_context, questions)
     
     total_time = time.time() - start_time
-    print(f"⚡ FastAPI QA completed in {total_time:.2f}s")
+    logger.info("FastAPI QA completed", elapsed_seconds=round(total_time, 2))
     
     return answers
 

@@ -5,6 +5,10 @@ from PIL import Image
 from io import BytesIO
 import pytesseract
 import os
+from logger.custom_logger import CustomLogger
+
+# module logger
+logger = CustomLogger().get_logger(__file__)
 
 def extract_xlsx(xlsx_path: str, tesseract_cmd: str = None) -> List[Dict[str, Any]]:
     """
@@ -80,6 +84,7 @@ def extract_xlsx(xlsx_path: str, tesseract_cmd: str = None) -> List[Dict[str, An
 
     return processed_sheets
 
-if __name__ == "__main__":
-     
-    print(extract_xlsx(r"C:\Users\Rahul\Desktop\test.xlsx"))
+# if __name__ == "__main__":
+    
+#     logger.info("Running xlsx extractor as script", path=r"C:\Users\Rahul\Desktop\test.xlsx")
+#     logger.info("Extractor output", result=extract_xlsx(r"C:\Users\Rahul\Desktop\test.xlsx"))

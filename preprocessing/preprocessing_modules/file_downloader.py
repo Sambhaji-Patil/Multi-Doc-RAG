@@ -8,12 +8,16 @@ import hashlib
 import atexit
 from urllib.parse import urlparse, unquote
 from typing import List, Tuple, Union, Optional
+from logger.custom_logger import CustomLogger
+
+logger = CustomLogger().get_logger(__file__)
+
 
 class FileDownloader:
     def __init__(self):
-        # ... (rest of the class is the same) ...
+        # Create a temporary cache directory per instance
         self.cache_dir = tempfile.mkdtemp(prefix="file_downloader_")
-        print(f"📂 Temp cache directory created: {self.cache_dir}")
+        logger.info("Temp cache directory created", cache_dir=self.cache_dir)
         atexit.register(self._cleanup_cache_dir)
 
     def _get_cache_path(self, cache_key: str, ext: str) -> str:
@@ -28,7 +32,7 @@ class FileDownloader:
         timeout: int = 300,
         max_retries: int = 3,
     ) -> Tuple[str, str]:
-        # ... (dispatcher logic is the same) ...
+        """Dispatch to the appropriate handler based on the source type."""
         if isinstance(source, bytes):
             if not filename:
                 raise ValueError("Argument 'filename' must be provided when source is bytes.")
@@ -48,53 +52,50 @@ class FileDownloader:
 
     def _handle_path(self, path: str) -> Tuple[str, str]:
         """Handle local file paths with proper normalization and URL decoding."""
-        # Decode URL encoding if present and normalize path
         decoded_path = unquote(path)
         normalized_path = os.path.normpath(os.path.abspath(decoded_path))
-        
-        print(f"Processing local file: {path}")
+
+        logger.info("Processing local file", original_path=path, decoded_path=decoded_path, normalized_path=normalized_path)
         if path != decoded_path:
-            print(f"Decoded to: {decoded_path}")
-        print(f"Normalized to: {normalized_path}")
-        
+            logger.info("Decoded to", decoded_path=decoded_path)
+
         # Check if file actually exists
         if not os.path.exists(normalized_path):
             raise FileNotFoundError(f"Local file not found: {normalized_path}")
-        
+
         cache_key = normalized_path
         _, ext = os.path.splitext(normalized_path)
         if not ext:
             raise ValueError("File from path does not have an extension.")
-        
+
         # Check supported file types
         supported_extensions = ['.pdf', '.docx', '.pptx', '.png', '.xlsx', '.jpeg', '.jpg', '.txt', '.csv']
         if ext.lower() not in supported_extensions:
             raise ValueError(f"File type '{ext}' is not supported. Supported types: {supported_extensions}")
-        
+
         cache_path = self._get_cache_path(cache_key, ext)
         if os.path.exists(cache_path):
-            print(f"⚡ Cache hit! Using cached file: {cache_path}")
-            return cache_path, ext.lstrip(".")
-        
+            logger.info("Cache hit", cache_path=cache_path)
+            return cache_path, ext.lstrip('.')
+
         shutil.copy(normalized_path, cache_path)
-        print(f"✅ File copied to cache: {cache_path}")
-        return cache_path, ext.lstrip(".")
+        logger.info("File copied to cache", cache_path=cache_path)
+        return cache_path, ext.lstrip('.')
 
     def _handle_bytes(self, data: bytes, filename: str) -> Tuple[str, str]:
-        # ... (same as before) ...
-        print(f"📦 Processing byte stream (filename: {filename}, size: {len(data)/1024:.2f} KB)")
+        logger.info("Processing byte stream", filename=filename, size_kb=len(data) / 1024.0)
         cache_key = hashlib.sha256(data).hexdigest()
         _, ext = os.path.splitext(filename)
         if not ext:
             raise ValueError("Provided filename for byte stream does not have an extension.")
         cache_path = self._get_cache_path(cache_key, ext)
         if os.path.exists(cache_path):
-            print(f"⚡ Cache hit! Using cached file: {cache_path}")
-            return cache_path, ext.lstrip(".")
+            logger.info("Cache hit", cache_path=cache_path)
+            return cache_path, ext.lstrip('.')
         with open(cache_path, "wb") as f:
             f.write(data)
-        print(f"✅ Byte stream saved to cache: {cache_path}")
-        return cache_path, ext.lstrip(".")
+        logger.info("Byte stream saved to cache", cache_path=cache_path)
+        return cache_path, ext.lstrip('.')
 
     async def _get_url_metadata(self, session: aiohttp.ClientSession, url: str) -> Tuple[str, str]:
         """
@@ -102,20 +103,19 @@ class FileDownloader:
         Returns (filename, extension_with_dot)
         """
         try:
-            # First, try a HEAD request for efficiency
             async with session.head(url, allow_redirects=True) as response:
-                response.raise_for_status() # Check for HTTP errors
-                
-                # Check Content-Disposition header first
+                response.raise_for_status()
+
                 cd = response.headers.get('Content-Disposition', '')
-                filename_match = re.findall('filename="?([^"]+)"?', cd)
+                filename_match = re.findall('filename="?([^\"]+)"?', cd)
                 if filename_match:
                     filename = filename_match[0]
                     _, ext = os.path.splitext(filename)
-                    if ext: return filename, ext
+                    if ext:
+                        return filename, ext
 
         except Exception as e:
-            print(f"   ⚠️ HEAD request failed or not supported: {e}. Falling back to URL path.")
+            logger.warning("HEAD request failed or not supported, falling back to URL path", url=url, error=str(e))
 
         # Fallback to parsing the URL path
         parsed_path = unquote(urlparse(url).path)
@@ -129,53 +129,48 @@ class FileDownloader:
         """
         Download any file type from a URL to the temp cache, with robust caching.
         """
-        print(f"📥 Processing URL: {url[:60]}...")
+        logger.info("Processing URL", url_preview=(url[:60] + '...' if len(url) > 60 else url))
         cache_key = url
-        
+
         timeout_config = aiohttp.ClientTimeout(total=timeout, connect=30, sock_read=120)
 
-        # Create the session once for both HEAD and GET requests
         async with aiohttp.ClientSession(timeout=timeout_config) as session:
             # --- ROBUST CACHE CHECK ---
-            # Get metadata (like filename and ext) *before* downloading content
             _, ext = await self._get_url_metadata(session, url)
 
             if ext:
                 cache_path = self._get_cache_path(cache_key, ext)
                 if os.path.exists(cache_path):
-                    print(f"⚡ Cache hit! Using cached file: {cache_path}")
-                    return cache_path, ext.lstrip(".")
-            # --- END OF CACHE CHECK ---
-            
-            # If we are here, it means it's not in the cache, so proceed with download
-            print(f"   ⬇️ No cache found. Starting download...")
+                    logger.info("Cache hit", cache_path=cache_path)
+                    return cache_path, ext.lstrip('.')
+
+            # If not cached, download
+            logger.info("No cache found. Starting download", url=url)
             for attempt in range(max_retries):
                 try:
-                    print(f"   Attempt {attempt + 1}/{max_retries} (timeout: {timeout}s)")
+                    logger.info("Download attempt", attempt=attempt + 1, max_retries=max_retries, timeout_s=timeout)
 
                     async with session.get(url) as response:
-                        response.raise_for_status() # Replaces the old `if response.status != 200`
+                        response.raise_for_status()
 
-                        # We already have the extension, but let's re-confirm filename for saving
                         cd = response.headers.get('Content-Disposition', '')
-                        filename_match = re.findall('filename="?([^"]+)"?', cd)
+                        filename_match = re.findall('filename="?([^\"]+)"?', cd)
                         if filename_match:
                             filename = filename_match[0]
                         else:
                             filename = os.path.basename(unquote(urlparse(url).path)) or "downloaded_file"
-                        
+
                         final_ext = os.path.splitext(filename)[1]
                         if not final_ext:
-                            return url, "url" # Handle cases with no extension
+                            return url, "url"
 
                         if final_ext.lower() not in ['.pdf', '.docx', '.pptx', '.png', '.xlsx', '.jpeg', '.jpg', '.txt', '.csv']:
-                            print(f"   ❌ File type not supported: {final_ext}")
+                            logger.error("File type not supported", file_type=final_ext)
                             return ['not supported', final_ext.lstrip('.')]
-                        
+
                         final_cache_path = self._get_cache_path(cache_key, final_ext)
 
                         with open(final_cache_path, "wb") as f:
-                            # ... (download progress logic remains the same) ...
                             total_size = int(response.headers.get('content-length', 0))
                             downloaded = 0
                             async for chunk in response.content.iter_chunked(16384):
@@ -183,32 +178,31 @@ class FileDownloader:
                                 downloaded += len(chunk)
                                 if total_size and downloaded > 0 and downloaded % (1024 * 1024) < 16384:
                                     progress = (downloaded / total_size) * 100
-                                    print(f"   Progress: {progress:.1f}% ({downloaded / (1024*1024):.1f} MB)")
+                                    logger.info("Download progress", percent=round(progress, 1), downloaded_mb=round(downloaded / (1024*1024), 1))
 
-                        print(f"✅ File downloaded successfully: {final_cache_path}")
+                        logger.info("File downloaded successfully", cache_path=final_cache_path)
                         return final_cache_path, final_ext.lstrip('.')
 
                 except asyncio.TimeoutError:
-                    print(f"   ⏰ Timeout on attempt {attempt + 1}")
+                    logger.warning("Timeout on download attempt", attempt=attempt + 1)
                     if attempt < max_retries - 1:
                         wait_time = (attempt + 1) * 30
-                        print(f"   ⏳ Waiting {wait_time}s before retry...")
+                        logger.info("Waiting before retry", wait_seconds=wait_time)
                         await asyncio.sleep(wait_time)
                 except Exception as e:
-                    print(f"   ❌ Error on attempt {attempt + 1}: {e}")
+                    logger.error("Error on download attempt", attempt=attempt + 1, error=str(e))
                     if attempt < max_retries - 1:
                         wait_time = (attempt + 1) * 15
-                        print(f"   ⏳ Waiting {wait_time}s before retry...")
+                        logger.info("Waiting before retry", wait_seconds=wait_time)
                         await asyncio.sleep(wait_time)
 
         raise Exception(f"Failed to download file after {max_retries} attempts")
 
 
     def _cleanup_cache_dir(self):
-        # ... (same as before) ...
         if os.path.exists(self.cache_dir):
             try:
                 shutil.rmtree(self.cache_dir)
-                print(f"🗑️ Deleted temp cache directory: {self.cache_dir}")
+                logger.info("Deleted temp cache directory", cache_dir=self.cache_dir)
             except Exception as e:
-                print(f"⚠️ Could not delete cache directory {self.cache_dir}: {e}")
+                logger.warning("Could not delete cache directory", cache_dir=self.cache_dir, error=str(e))

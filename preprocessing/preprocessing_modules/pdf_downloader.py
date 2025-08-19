@@ -9,6 +9,9 @@ import asyncio
 import tempfile
 import aiohttp
 from typing import Optional
+from logger.custom_logger import CustomLogger
+
+logger = CustomLogger().get_logger(__file__)
 
 
 class PDFDownloader:
@@ -33,7 +36,7 @@ class PDFDownloader:
         Raises:
             Exception: If download fails after all retries
         """
-        print(f"📥 Downloading PDF from: {url[:50]}...")
+        logger.info("Downloading PDF", url_preview=(url[:50] + '...' if len(url) > 50 else url))
         
         for attempt in range(max_retries):
             try:
@@ -45,7 +48,7 @@ class PDFDownloader:
                 )
                 
                 async with aiohttp.ClientSession(timeout=timeout_config) as session:
-                    print(f"   Attempt {attempt + 1}/{max_retries} (timeout: {timeout}s)")
+                    logger.info("Attempting PDF download", attempt=attempt + 1, max_retries=max_retries, timeout_s=timeout)
                     
                     async with session.get(url) as response:
                         if response.status != 200:
@@ -55,7 +58,7 @@ class PDFDownloader:
                         content_length = response.headers.get('content-length')
                         if content_length:
                             total_size = int(content_length)
-                            print(f"   File size: {total_size / (1024*1024):.1f} MB")
+                            logger.info("PDF size", size_mb=round(total_size / (1024*1024), 1))
                         
                         # Create temporary file
                         temp_file = tempfile.NamedTemporaryFile(
@@ -73,25 +76,25 @@ class PDFDownloader:
                             # Show progress for large files
                             if content_length and downloaded % (1024*1024) == 0:  # Every MB
                                 progress = (downloaded / total_size) * 100
-                                print(f"   Progress: {progress:.1f}% ({downloaded/(1024*1024):.1f} MB)")
+                                logger.info("PDF download progress", percent=round(progress, 1), downloaded_mb=round(downloaded/(1024*1024), 1))
                         
                         temp_file.close()
-                        print(f"✅ PDF downloaded successfully: {temp_file.name}")
+                        logger.info("PDF downloaded successfully", path=temp_file.name)
                         return temp_file.name
                         
             except asyncio.TimeoutError:
-                print(f"   ⏰ Timeout on attempt {attempt + 1}")
+                logger.warning("Timeout downloading PDF", attempt=attempt + 1)
                 if attempt < max_retries - 1:
                     wait_time = (attempt + 1) * 30  # Increasing wait time
-                    print(f"   ⏳ Waiting {wait_time}s before retry...")
+                    logger.info("Waiting before retry", wait_seconds=wait_time)
                     await asyncio.sleep(wait_time)
                 continue
                 
             except Exception as e:
-                print(f"   ❌ Error on attempt {attempt + 1}: {str(e)}")
+                logger.error("Error downloading PDF", attempt=attempt + 1, error=str(e))
                 if attempt < max_retries - 1:
                     wait_time = (attempt + 1) * 15
-                    print(f"   ⏳ Waiting {wait_time}s before retry...")
+                    logger.info("Waiting before retry", wait_seconds=wait_time)
                     await asyncio.sleep(wait_time)
                 continue
         
@@ -107,6 +110,6 @@ class PDFDownloader:
         if temp_path and os.path.exists(temp_path):
             try:
                 os.unlink(temp_path)
-                print(f"🗑️ Cleaned up temporary file: {temp_path}")
+                logger.info("Cleaned up temporary file", path=temp_path)
             except Exception as e:
-                print(f"⚠️ Warning: Could not delete temporary file {temp_path}: {e}")
+                logger.warning("Could not delete temporary file", path=temp_path, error=str(e))

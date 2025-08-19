@@ -3,8 +3,10 @@ import pytesseract
 import numpy as np
 import pandas as pd
 from PIL import Image, ImageFile
+from logger.custom_logger import CustomLogger
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
+logger = CustomLogger().get_logger(__file__)
 
 def load_local_image(path: str) -> np.ndarray:
     img = Image.open(path).convert("RGB")
@@ -166,7 +168,7 @@ def extract_image(filepath: str) -> str:
             df = extract_cells_from_grid(cropped)
             tables.append((df, (x, y, w, h)))
         except Exception as e:
-            print(f"[Warning] Skipping table {i} due to error: {e}")
+            logger.warning("Skipping table due to error", table_index=i, error=str(e))
 
     non_table_text = extract_non_table_text(image, table_boxes)
 

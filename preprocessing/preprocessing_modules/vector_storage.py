@@ -11,6 +11,10 @@ import pandas as pd
 from typing import List, Optional
 from pathlib import Path
 import shutil
+from logger.custom_logger import CustomLogger
+
+# module logger
+logger = CustomLogger().get_logger(__file__)
 
 class VectorStorage:
     """Handles vector storage operations with a unified LanceDB table."""
@@ -48,8 +52,8 @@ class VectorStorage:
             raise ValueError(f"Chunk count ({len(chunks)}) doesn't match embedding count ({embeddings.shape[0]})")
         
         db = self._get_db()
-        
-        print(f"💾 Storing {len(chunks)} vectors for document: {doc_id}")
+
+        logger.info("Storing vectors for document", doc_id=doc_id, count=len(chunks))
         
         try:
             # Prepare data in a format LanceDB understands (list of dicts or DataFrame)
@@ -68,16 +72,16 @@ class VectorStorage:
                 # Table exists, add data to it
                 tbl = db.open_table(self.collection_name)
                 tbl.add(data)
-                print(f"📚 Added {len(data)} new records to existing table: {self.collection_name}")
+                logger.info("Added new records to existing table", collection=self.collection_name, added=len(data))
             else:
                 # Table does not exist, create it with the first batch of data
                 db.create_table(self.collection_name, data=data)
-                print(f"✅ Created new unified table: {self.collection_name}")
+                logger.info("Created new unified table", collection=self.collection_name)
             
-            print(f"✅ Successfully stored all vectors for {doc_id}")
+            logger.info("Successfully stored all vectors for document", doc_id=doc_id)
             
         except Exception as e:
-            print(f"❌ Error storing vectors for {doc_id}: {e}")
+            logger.error("Error storing vectors for document", doc_id=doc_id, error=str(e))
             raise
             
     def collection_exists(self, doc_id: Optional[str] = None) -> bool:
@@ -120,7 +124,7 @@ class VectorStorage:
         """Delete all records for a specific document from the unified table."""
         try:
             if not self.collection_exists():
-                print("📁 Database doesn't exist, nothing to delete.")
+                logger.info("Database doesn't exist, nothing to delete")
                 return True
             
             db = self._get_db()
@@ -129,11 +133,11 @@ class VectorStorage:
             where_clause = f"doc_id = '{doc_id}'"
             tbl.delete(where_clause)
             
-            print(f"🗑️ Deleted all vectors for document: {doc_id}")
+            logger.info("Deleted all vectors for document", doc_id=doc_id)
             return True
             
         except Exception as e:
-            print(f"❌ Error deleting document {doc_id}: {e}")
+            logger.error("Error deleting document", doc_id=doc_id, error=str(e))
             return False
 
     def delete_collection(self, doc_id: Optional[str] = None) -> bool:
@@ -141,12 +145,12 @@ class VectorStorage:
         try:
             if self.db_path.exists():
                 shutil.rmtree(self.db_path)
-                print(f"🗑️ Deleted unified collection directory: {self.db_path}")
+                logger.info("Deleted unified collection directory", path=str(self.db_path))
                 # Reset connection object
                 self._db = None
                 return True
         except Exception as e:
-            print(f"❌ Error deleting collection {self.collection_name}: {e}")
+            logger.error("Error deleting collection", collection=self.collection_name, error=str(e))
             return False
         return True
 
@@ -168,7 +172,7 @@ class VectorStorage:
             return sorted(unique_doc_ids)
             
         except Exception as e:
-            print(f"❌ Error listing documents: {e}")
+            logger.error("Error listing documents", error=str(e))
             return []
 
     def close(self):

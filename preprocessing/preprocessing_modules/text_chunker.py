@@ -6,6 +6,10 @@ Handles chunking text into smaller pieces with overlap for better context preser
 import re
 from typing import List, Dict, Any
 from config.config import CHUNK_SIZE, CHUNK_OVERLAP
+from logger.custom_logger import CustomLogger
+
+# module logger
+logger = CustomLogger().get_logger(__file__)
 
 
 class TextChunker:
@@ -26,7 +30,7 @@ class TextChunker:
         Returns:
             List[dict]: List of chunks with page number and content
         """
-        print(f"✂️ Chunking text into {self.chunk_size} character chunks with {self.chunk_overlap} overlap")
+        logger.info("Chunking text", chunk_size=self.chunk_size, overlap=self.chunk_overlap)
 
         # Merge all pages into one text, but keep track of offsets
         merged_text = ""
@@ -61,7 +65,7 @@ class TextChunker:
             if start >= len(merged_text):
                 break
 
-        print(f"✅ Created {len(chunks)} chunks (size={self.chunk_size}, overlap={self.chunk_overlap})")
+        logger.info("Created chunks", count=len(chunks), chunk_size=self.chunk_size, overlap=self.chunk_overlap)
         return chunks
 
     def _get_page_for_offset(self, offset: int, page_boundaries: List[tuple]) -> int:

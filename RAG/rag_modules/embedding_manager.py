@@ -9,6 +9,10 @@ from typing import List
 from sentence_transformers import SentenceTransformer
 from config.config import EMBEDDING_MODEL
 from shared.model_manager import shared_model_manager
+from logger.custom_logger import CustomLogger
+
+# module logger
+logger = CustomLogger().get_logger(__file__)
 
 
 class EmbeddingManager:
@@ -17,7 +21,7 @@ class EmbeddingManager:
     def __init__(self):
         """Initialize the embedding manager with shared model."""
         self.embedding_model = None
-        print("🔗 RAG Embedding Manager initialized (using shared model)")
+    logger.info("RAG Embedding Manager initialized (using shared model)")
     
     @property
     def model(self) -> SentenceTransformer:

@@ -11,6 +11,10 @@ import hashlib
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 from config.config import EMBEDDING_MODEL, CHUNK_SIZE, CHUNK_OVERLAP
+from logger.custom_logger import CustomLogger
+
+# module logger
+logger = CustomLogger().get_logger(__file__)
 
 
 class MetadataManager:
@@ -38,7 +42,7 @@ class MetadataManager:
                 with open(self.processed_docs_file, 'r', encoding='utf-8') as f:
                     return json.load(f)
             except Exception as e:
-                print(f"⚠️ Warning: Could not load processed docs registry: {e}")
+                logger.warning("Could not load processed docs registry", error=str(e))
         return {}
     
     def _save_processed_docs(self):
@@ -47,7 +51,7 @@ class MetadataManager:
             with open(self.processed_docs_file, 'w', encoding='utf-8') as f:
                 json.dump(self.processed_docs, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"⚠️ Warning: Could not save processed docs registry: {e}")
+            logger.warning("Could not save processed docs registry", error=str(e))
     
     def _load_collection_info(self) -> Dict[str, Any]:
         """Load unified collection information."""
@@ -56,7 +60,7 @@ class MetadataManager:
                 with open(self.unified_collection_info_file, 'r', encoding='utf-8') as f:
                     return json.load(f)
             except Exception as e:
-                print(f"⚠️ Warning: Could not load collection info: {e}")
+                logger.warning("Could not load collection info", error=str(e))
         
         # Return default collection info structure
         return {
@@ -79,7 +83,7 @@ class MetadataManager:
             with open(self.unified_collection_info_file, 'w', encoding='utf-8') as f:
                 json.dump(self.collection_info, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"⚠️ Warning: Could not save collection info: {e}")
+            logger.warning("Could not save collection info", error=str(e))
     
     def generate_doc_id(self, document_url: str) -> str:
         """
@@ -142,9 +146,9 @@ class MetadataManager:
         try:
             with open(metadata_path, "w", encoding="utf-8") as f:
                 json.dump(metadata, f, indent=2, ensure_ascii=False)
-            print(f"✅ Saved individual metadata for {doc_id}")
+            logger.info("Saved individual metadata", doc_id=doc_id)
         except Exception as e:
-            print(f"⚠️ Warning: Could not save individual metadata for {doc_id}: {e}")
+            logger.warning("Could not save individual metadata", doc_id=doc_id, error=str(e))
         
         # Check if this is a new document or update
         is_new_document = doc_id not in self.processed_docs
@@ -172,7 +176,7 @@ class MetadataManager:
         self.collection_info["last_updated"] = current_time
         self._save_collection_info()
         
-        print(f"✅ Updated registry for document {doc_id} in unified collection")
+        logger.info("Updated registry for document in unified collection", doc_id=doc_id)
     
     def get_document_metadata(self, doc_id: str) -> Dict[str, Any]:
         """
@@ -187,7 +191,7 @@ class MetadataManager:
             with open(metadata_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"⚠️ Warning: Could not load metadata for {doc_id}: {e}")
+            logger.warning("Could not load metadata", doc_id=doc_id, error=str(e))
             return {}
     
     def list_processed_documents(self) -> Dict[str, Dict]:
@@ -266,7 +270,7 @@ class MetadataManager:
             metadata_path = self.base_db_path / f"{doc_id}_metadata.json"
             if metadata_path.exists():
                 metadata_path.unlink()
-                print(f"🗑️ Removed metadata file for {doc_id}")
+                logger.info("Removed metadata file", doc_id=doc_id)
             
             # Remove from registry and update collection info
             if doc_id in self.processed_docs:
@@ -285,12 +289,12 @@ class MetadataManager:
                 self.collection_info["last_updated"] = asyncio.get_event_loop().time()
                 self._save_collection_info()
                 
-                print(f"🗑️ Removed registry entry for {doc_id}")
+                logger.info("Removed registry entry", doc_id=doc_id)
             
             return True
             
         except Exception as e:
-            print(f"❌ Error removing metadata for {doc_id}: {e}")
+            logger.error("Error removing metadata", doc_id=doc_id, error=str(e))
             return False
     
     def update_document_status(self, doc_id: str, status_info: Dict[str, Any]):
@@ -309,7 +313,7 @@ class MetadataManager:
             self.collection_info["last_updated"] = asyncio.get_event_loop().time()
             self._save_collection_info()
             
-            print(f"✅ Updated status for document {doc_id}")
+            logger.info("Updated status for document", doc_id=doc_id)
     
     def get_registry_path(self) -> str:
         """
@@ -386,9 +390,9 @@ class MetadataManager:
                 if doc_id not in self.processed_docs:
                     metadata_file.unlink()
                     cleaned_files.append(str(metadata_file))
-                    print(f"🧹 Cleaned up orphaned metadata: {metadata_file.name}")
+                    logger.info("Cleaned up orphaned metadata", filename=metadata_file.name)
             
         except Exception as e:
-            print(f"⚠️ Warning: Error during metadata cleanup: {e}")
+            logger.warning("Error during metadata cleanup", error=str(e))
         
         return cleaned_files

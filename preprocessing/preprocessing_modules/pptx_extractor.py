@@ -13,6 +13,10 @@ import os
 # For demonstration, you can replace OCR_SPACE_API_KEY with your actual key string.
 # from config.config import OCR_SPACE_API_KEY
 from config.config import OCR_SPACE_API_KEY # <-- IMPORTANT: Replace with your actual OCR Space API key
+from logger.custom_logger import CustomLogger
+
+# module logger
+logger = CustomLogger().get_logger(__file__)
 
 API_URL = "https://api.ocr.space/parse/image"
 
@@ -78,7 +82,7 @@ def extract_pptx_with_meta(pptx_path: str) -> List[Dict[str, Any]]:
     
     try:
         # Extract all images first
-        print(f"Extracting images from PPTX to temporary directory: {temp_dir}")
+        logger.info("Extracting images from PPTX to temporary directory", temp_dir=temp_dir)
         for slide_index, slide in enumerate(prs.slides):
             for shape_index, shape in enumerate(slide.shapes):
                 if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
@@ -88,14 +92,14 @@ def extract_pptx_with_meta(pptx_path: str) -> List[Dict[str, Any]]:
                         img.save(temp_file, 'PNG')
                         temp_image_files.append(temp_file)
                         image_to_shape_mapping[temp_file] = (slide_index, shape_index)
-                        print(f"Extracted image: slide {slide_index}, shape {shape_index}")
+                        logger.info("Extracted image from slide", slide=slide_index, shape=shape_index, file=temp_file)
                     except Exception as e:
-                        print(f"Failed to extract image from slide {slide_index}, shape {shape_index}: {e}")
+                        logger.error("Failed to extract image from slide", slide=slide_index, shape=shape_index, error=str(e))
         
         # Process all images in parallel using OCR Space API
-        print(f"Processing {len(temp_image_files)} images with OCR Space API...")
+        logger.info("Processing images with OCR Space API", total_images=len(temp_image_files))
         ocr_results = batch_ocr_parallel(temp_image_files, max_workers=5)
-        print(f"OCR processing completed for {len(ocr_results)} images")
+        logger.info("OCR processing completed", processed=len(ocr_results))
         
         # Second pass: build the content structure
         for slide_index, slide in enumerate(prs.slides):
@@ -120,13 +124,14 @@ def extract_pptx_with_meta(pptx_path: str) -> List[Dict[str, Any]]:
                         if s_idx == slide_index and sh_idx == shape_index:
                             temp_file_key = temp_file
                             break
-                    
+
+                    # If we found a matching temp file, look up OCR results
                     if temp_file_key and temp_file_key in ocr_results:
                         ocr_text = ocr_results[temp_file_key].strip()
                         if ocr_text and not ocr_text.startswith("Error:"):
                             content_block["type"] = "image"
                             content_block["content"] = ocr_text
-                            print(f"OCR extracted from slide {slide_index}: {ocr_text[:100]}...")
+                            logger.info("OCR extracted from slide", slide=slide_index, preview=ocr_text[:100])
                         else:
                             content_block["type"] = "image"
                             content_block["content"] = f"[OCR failed: {ocr_text}]"
@@ -161,24 +166,24 @@ def extract_pptx_with_meta(pptx_path: str) -> List[Dict[str, Any]]:
                     })
 
             all_slides_content.append(slide_data)
-            
+        
     finally:
         # Clean up temporary files
-        print(f"Cleaning up {len(temp_image_files)} temporary files...")
+        logger.info("Cleaning up temporary files", count=len(temp_image_files))
         for temp_file in temp_image_files:
             try:
                 if os.path.exists(temp_file):
                     os.remove(temp_file)
             except Exception as e:
-                print(f"Failed to remove temp file {temp_file}: {e}")
+                logger.error("Failed to remove temp file", file=temp_file, error=str(e))
         
         # Remove temp directory
         try:
             if os.path.exists(temp_dir):
                 os.rmdir(temp_dir)
-            print("Temporary directory cleanup completed")
+            logger.info("Temporary directory cleanup completed")
         except Exception as e:
-            print(f"Failed to remove temp directory {temp_dir}: {e}")
+            logger.error("Failed to remove temp directory", dir=temp_dir, error=str(e))
     
     return all_slides_content
 

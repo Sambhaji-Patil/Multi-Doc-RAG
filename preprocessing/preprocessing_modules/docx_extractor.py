@@ -1,6 +1,9 @@
 from zipfile import ZipFile
 from lxml import etree
 from typing import List, Dict, Any
+from logger.custom_logger import CustomLogger
+
+logger = CustomLogger().get_logger(__file__)
 
 def extract_docx(docx_input) -> List[Dict[str, Any]]:
     """
@@ -27,7 +30,7 @@ def extract_docx(docx_input) -> List[Dict[str, Any]]:
         zipf = ZipFile(docx_input)
         xml_content = zipf.read("word/document.xml")
     except Exception as e:
-        print(f"Error reading DOCX file: {e}")
+        logger.error("Error reading DOCX file", error=str(e))
         return []
 
     tree = etree.fromstring(xml_content)

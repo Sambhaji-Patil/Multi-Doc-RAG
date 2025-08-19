@@ -19,6 +19,10 @@ from config.config import (
     OUTPUT_DIR, TOP_K, SCORE_THRESHOLD, ENABLE_HYBRID_SEARCH,
     BM25_WEIGHT, SEMANTIC_WEIGHT, USE_TOTAL_BUDGET_APPROACH
 )
+from logger.custom_logger import CustomLogger
+
+# module-level logger
+logger = CustomLogger().get_logger(__file__)
 
 class SearchManager:
     """Manages hybrid search operations across multiple documents in a unified LanceDB table."""
@@ -32,7 +36,7 @@ class SearchManager:
         self._db = None
         self.bm25_indexes = {}  # Cache BM25 indexes per document set
         self.document_chunks = {}  # Cache chunks for BM25 per document set
-        print("🟢-> Multi-Document Search Manager initialized with LanceDB")
+    logger.info("Multi-Document Search Manager initialized with LanceDB", status="initialized")
     
     def _get_db(self) -> lancedb.LanceDBConnection:
         """Get or create LanceDB connection."""
@@ -56,7 +60,7 @@ class SearchManager:
         doc_set_key = "_".join(sorted(doc_ids))
         
         if doc_set_key not in self.bm25_indexes:
-            print(f"📄 Loading BM25 index for documents: {doc_ids}")
+            logger.info("Loading BM25 index for documents", doc_ids=doc_ids)
             
             db = self._get_db()
             
@@ -91,12 +95,12 @@ class SearchManager:
                 
                 doc_distribution = df['doc_id'].value_counts().to_dict()
                 
-                print(f"🟢-> BM25 index loaded for {len(chunks)} total chunks:")
+                logger.info("BM25 index loaded", chunks=len(chunks), distribution=doc_distribution)
                 for doc_id, count in doc_distribution.items():
-                    print(f"   📄 {doc_id}: {count} chunks")
+                    logger.info("Document chunk distribution", doc_id=doc_id, count=count)
                 
             except Exception as e:
-                print(f"🔴-> Error loading BM25 index for {doc_ids}: {e}")
+                logger.error("Error loading BM25 index for documents", doc_ids=doc_ids, error=str(e))
                 self.bm25_indexes[doc_set_key] = BM25Okapi([[]])
                 self.document_chunks[doc_set_key] = {
                     'chunks': [], 'chunk_ids': [], 'doc_sources': [], 'tokenized_chunks': []
@@ -113,10 +117,7 @@ class SearchManager:
         if isinstance(doc_ids, str):
             doc_ids = [doc_ids]
         
-        print(f"🟢-> Starting multi-document hybrid search:")
-        print(f"   📄 Documents: {doc_ids}")
-        print(f"   🔍 Queries: {len(queries)} focused queries")
-        print(f"   🎯 Target results: {top_k}")
+        logger.info("Starting multi-document hybrid search", documents=doc_ids, queries=len(queries), target=top_k)
         
         db = self._get_db()
         tbl = db.open_table(self.collection_name)
@@ -137,7 +138,7 @@ class SearchManager:
         all_candidates = {}
         query_performance = {}
         
-        print(f"🟢-> Running hybrid search with {len(queries)} focused queries...")
+        logger.info("Running hybrid search", queries=len(queries))
         
         for query_idx, query in enumerate(queries):
             query_candidates = 0
@@ -150,7 +151,7 @@ class SearchManager:
                 query_budget = per_query_budget
                 search_limit = query_budget * 2
             
-            print(f"   Q{query_idx+1} Budget: {query_budget} candidates (searching {search_limit})")
+            logger.info("Query budget allocated", query_index=query_idx+1, budget=query_budget, search_limit=search_limit)
             
             # 1. Semantic Search with Document Filter
             if True: # Always do semantic
@@ -198,7 +199,7 @@ class SearchManager:
                         semantic_count += 1
                 
                 except Exception as e:
-                    print(f"🔴-> Semantic search failed for query '{query[:50]}...': {e}")
+                    logger.error("Semantic search failed for query", query=query[:50], error=str(e))
 
             # 2. BM25 Search (if enabled)
             if ENABLE_HYBRID_SEARCH and doc_set_key in self.bm25_indexes:
@@ -248,7 +249,7 @@ class SearchManager:
                             bm25_count += 1
                 
                 except Exception as e:
-                    print(f"🔴-> BM25 search failed for query '{query[:50]}...': {e}")
+                    logger.error("BM25 search failed for query", query=query[:50], error=str(e))
             
             query_time = time.time() - query_start
             query_performance[query_idx] = {
@@ -275,7 +276,7 @@ class SearchManager:
             })
         
         # ... (Logging logic remains the same) ...
-        print("\n🟢-> Multi-document hybrid search completed...")
+        logger.info("Multi-document hybrid search completed", results=len(hybrid_results))
         # ...
 
         return hybrid_results
@@ -326,7 +327,7 @@ class SearchManager:
         try:
             db = self._get_db()
             if self.collection_name not in db.table_names():
-                print("🟡-> Collection does not exist yet.")
+                logger.info("Collection does not exist yet", collection=self.collection_name)
                 return []
             
             tbl = db.open_table(self.collection_name)
@@ -342,7 +343,7 @@ class SearchManager:
             return doc_ids
             
         except Exception as e:
-            print(f"🔴-> Error listing documents: {e}")
+            logger.error("Error listing documents", error=str(e))
             return []
     
     def get_document_stats(self, doc_ids: Union[str, List[str]] = None) -> Dict:
@@ -404,13 +405,13 @@ class SearchManager:
             }
             
         except Exception as e:
-            print(f"🔴-> Error getting document stats: {e}")
+            logger.error("Error getting document stats", error=str(e))
             return {"error": str(e)}
 
     def cleanup(self):
         """Cleanup search manager resources."""
-        print("🧹 Cleaning up Multi-Document Search Manager resources...")
+        logger.info("Cleaning up Multi-Document Search Manager resources", status="cleanup_start")
         self._db = None
         self.bm25_indexes.clear()
         self.document_chunks.clear()
-        print("🟢-> Multi-Document Search Manager cleanup completed")
+        logger.info("Multi-Document Search Manager cleanup completed", status="cleanup_done")

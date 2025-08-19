@@ -6,8 +6,10 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_groq import ChatGroq
 
 from dotenv import load_dotenv
+from logger.custom_logger import CustomLogger
 
 load_dotenv()
+logger = CustomLogger().get_logger(__file__)
 
 
 API_KEY = os.environ.get("GROQ_API_KEY_TABULAR")
@@ -106,13 +108,13 @@ def get_answer_for_tabluar(
             response = GROQ_LLM.invoke(messages)
         except Exception as e:
             if verbose:
-                print(f"Error from Groq: {e}")
+                logger.error("Groq error during tabular answer batch", error=str(e))
             all_answers.extend(["LLM failed to answer."] * len(batch))
             continue
 
         raw = response.content.strip()
         if verbose:
-            print(f"\n--- Groq Response (Batch {i // batch_size + 1}) ---\n{raw}\n")
+            logger.info("Groq response for tabular batch", batch_number=(i // batch_size + 1), response_preview=raw[:200])
 
         answers = parse_numbered_answers(raw, len(batch))
         all_answers.extend(answers)
