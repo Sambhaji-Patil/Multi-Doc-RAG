@@ -162,8 +162,8 @@ class ModularDocumentPreprocessor:
                 case 'csv':
                     with open(temp_file_path, 'r') as f:
                         content = f.read()
-                    self.special_content_cache[doc_id] = content
-                    self.metadata_manager.save_document_metadata([content], doc_id, document_url)
+                    content = {"page_num": 1, "content": content}
+                    self.special_content_cache[doc_id] = [content]
                     return doc_id, "tabular"
 
                 case 'png' | 'jpeg' | 'jpg':
