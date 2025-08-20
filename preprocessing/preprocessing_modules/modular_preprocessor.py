@@ -6,7 +6,7 @@ Main orchestrator class that uses all preprocessing modules to process documents
 
 import os
 import asyncio
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Union
 from pathlib import Path
 
 from config.config import OUTPUT_DIR
@@ -92,10 +92,16 @@ class ModularDocumentPreprocessor:
     def get_collection_stats(self) -> Dict[str, Any]:
         """Get statistics about all collections."""
         return self.metadata_manager.get_collection_stats()
-
-    async def process_document(self, document_url: str, force_reprocess: bool = False, timeout: int = 300, skip_length_check=False) -> Tuple[str, str]:
+    
+    async def process_document(self, document_url: Union[str, Tuple[str, str, str]], force_reprocess: bool = False, timeout: int = 300, skip_length_check=False) -> Tuple[str, str]:
         """Process a single document. Returns its ID and type."""
-        doc_id = self.generate_doc_id(document_url)
+
+        if isinstance(document_url, tuple):
+            document_url, ext, doc_id = document_url   
+            doc_id = str(doc_id)
+        else:
+            ext = None
+            doc_id = self.generate_doc_id(document_url)
 
         if not force_reprocess and self.is_document_processed(document_url):
             logger.info("Document already processed, skipping", doc_id=doc_id)
@@ -103,11 +109,11 @@ class ModularDocumentPreprocessor:
 
         logger.info("Processing document", doc_id=doc_id, url=document_url)
 
-        temp_file_path = None
-        ext = None
         try:
             # Step 1: Download Document
-            temp_file_path, ext = await self.file_downloader.fetch_file(document_url, timeout=timeout)
+            if ext is None:
+                temp_file_path, ext = await self.file_downloader.fetch_file(document_url, timeout=timeout)
+            else: temp_file_path = document_url
 
             if temp_file_path == 'not supported':
                 return f"Document type '{ext}' is not supported.", "error"

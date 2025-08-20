@@ -15,15 +15,13 @@ logger = CustomLogger().get_logger(__file__)
 
 class FileDownloader:
     def __init__(self):
-        # Create a temporary cache directory per instance
-        self.cache_dir = tempfile.mkdtemp(prefix="file_downloader_")
-        logger.info("Temp cache directory created", cache_dir=self.cache_dir)
-        atexit.register(self._cleanup_cache_dir)
+        self.file_dir = "files"
+        os.makedirs(self.file_dir, exist_ok=True)
 
     def _get_cache_path(self, cache_key: str, ext: str) -> str:
         """Generate a cache file path for the given cache key and extension."""
         key_hash = hashlib.sha256(cache_key.encode("utf-8")).hexdigest()
-        return os.path.join(self.cache_dir, f"{key_hash}{ext}")
+        return os.path.join(self.file_dir, f"{key_hash}{ext}")
 
     async def fetch_file(
         self,
@@ -200,10 +198,10 @@ class FileDownloader:
         raise Exception(f"Failed to download file after {max_retries} attempts")
 
 
-    def _cleanup_cache_dir(self):
-        if os.path.exists(self.cache_dir):
+    def _cleanup_file_dir(self):
+        if os.path.exists(self.file_dir):
             try:
-                shutil.rmtree(self.cache_dir)
-                logger.info("Deleted temp cache directory", cache_dir=self.cache_dir)
+                shutil.rmtree(self.file_dir)
+                logger.info("Deleted temp cache directory", file_dir=self.file_dir)
             except Exception as e:
-                logger.warning("Could not delete cache directory", cache_dir=self.cache_dir, error=str(e))
+                logger.warning("Could not delete cache directory", file_dir=self.file_dir, error=str(e))

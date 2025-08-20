@@ -22,7 +22,7 @@ GROQ_LLM = ChatGroq(
 )
 
 
-def get_answer_for_tabluar(
+def get_answer_for_tabular(
     data: str,
     questions: List[str],
     batch_size: int = 10,

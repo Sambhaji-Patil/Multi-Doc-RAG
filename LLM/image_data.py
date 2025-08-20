@@ -101,11 +101,11 @@ def extract_data_from_image(
 
     system_prompt = textwrap.dedent("""
 You are an expert AI assistant for a robust RAG (Retrieval-Augmented Generation) system.
-Your task is to analyze the provided image and extract all relevant information in a structured format.
+Your task is to analyze the provided image and extract all relevant informations.
 
 Based on the image content, please do the following:
 
-1.  **Identify the image type** (e.g., 'table', 'bar chart', 'line graph', 'photograph', 'diagram').
+1.  **Identify the image contents** (e.g., 'table', 'bar chart', 'line graph', 'photograph', 'diagram').
 2.  **Extract all text verbatim (OCR)** if any is present.
 3.  **If it is a table:** Convert the entire table into a clean, pipe-delimited Markdown format.
 4.  **If it is a chart or graph:** Do not just describe it. Summarize the key insights, trends, and main data points. For example, "The bar chart shows a 50% increase in Q4 sales compared to Q1."

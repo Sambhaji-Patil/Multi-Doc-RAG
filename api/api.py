@@ -1,8 +1,27 @@
 from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
+
+from fastapi import FastAPI, UploadFile, Form, Depends
+from pydantic import BaseModel
+from typing import List, Optional
+
+import uuid, sqlite3, os, shutil, datetime, json
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+import requests
+
+import random
+from urllib.parse import urlparse
+
 from pydantic import BaseModel, HttpUrl
 from typing import List, Dict, Any, Optional, Union
 import tempfile
+import re
 import os
 import hashlib
 import asyncio
@@ -19,15 +38,103 @@ from LLM.image_data import extract_data_from_image
 from config.config import *
 import config.config as config
 
-from LLM.tabular_answer import get_answer_for_tabluar
+from LLM.tabular_answer import get_answer_for_tabular
 from LLM.image_answerer import get_answer_for_image
 from LLM.one_shotter import get_oneshot_answer
 from logger.custom_logger import CustomLogger
+
+import sqlite3
+
 
 # Initialize security
 security = HTTPBearer()
 admin_security = HTTPBearer()
 logger = CustomLogger().get_logger(__file__)
+
+DB_NAME = "database.db"
+
+
+def init_db():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            email TEXT PRIMARY KEY,
+            password TEXT,
+            user_id TEXT
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            session_id TEXT PRIMARY KEY,
+            user_id TEXT,
+            docs TEXT,
+            name TEXT,
+            last_updated TEXT
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS documents (
+            doc_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            path TEXT,
+            mime_type TEXT
+        )
+    """)
+    # FIXED: Quoted the "references" column name to avoid SQL keyword conflict
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS messages (
+            message_id TEXT PRIMARY KEY,
+            session_id TEXT,
+            sender TEXT,
+            content TEXT,
+            "references" TEXT,
+            timestamp TEXT
+        )
+    """)
+    
+    # FIXED: Ensure the alter table command also uses quoted "references"
+    try:
+        cursor.execute("PRAGMA table_info(messages)")
+        columns = [column[1] for column in cursor.fetchall()]
+        if 'references' not in columns:
+            cursor.execute('ALTER TABLE messages ADD COLUMN "references" TEXT')
+    except sqlite3.OperationalError:
+        pass
+
+    conn.commit()
+    conn.close()
+
+def get_db():
+    conn = sqlite3.connect(DB_NAME, timeout=30.0)  # 30 second timeout
+    conn.execute("PRAGMA journal_mode=WAL")  # Write-Ahead Logging for better concurrency
+    return conn
+
+def execute_db_operation(operation_func, max_retries=3):
+    """Execute a database operation with retry logic for lock handling"""
+    for attempt in range(max_retries):
+        conn = None
+        try:
+            conn = get_db()
+            result = operation_func(conn)
+            conn.close()
+            return result
+        except sqlite3.OperationalError as e:
+            if conn:
+                conn.close()
+            if "database is locked" in str(e) and attempt < max_retries - 1:
+                time.sleep(0.1 * (2 ** attempt))  # Exponential backoff
+                continue
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        except Exception as e:
+            if conn:
+                conn.close()
+            raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+    
+    raise HTTPException(status_code=500, detail="Database locked after multiple retries")
+
+init_db()
+
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Verify the bearer token for main API."""
@@ -104,6 +211,22 @@ class LogsResponse(BaseModel):
 class LogsSummaryResponse(BaseModel):
     summary: Dict[str, Any]
 
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class QueryRequest(BaseModel):
+    session_id: str
+    question: str
+
+class CloneRequest(BaseModel):
+    session_id: str
+
+
 # Global instances
 rag_processor: Optional[AdvancedRAGProcessor] = None
 document_preprocessor: Optional[DocumentPreprocessor] = None
@@ -129,6 +252,28 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+origins = [
+    "http://localhost",
+    "http://localhost:8080",
+    "http://127.0.0.1",
+    "http://127.0.0.1:8000",
+    "http://127.0.0.1:5500",
+    "http://localhost:3000",
+    "*",
+    "null"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
@@ -240,7 +385,7 @@ async def process_document(
                         final_answers = get_answer_for_image(doc_info.content, questions)
                     elif doc_info.status == "tabular":
                         context = "\n---\n".join([f"doc id: {doc_id}, page number: {d['page_num']}\n{d['content']}" for d in doc_info.content])
-                        final_answers = get_answer_for_tabluar(doc_info.content, questions)
+                        final_answers = get_answer_for_tabular(doc_info.content, questions)
                     elif doc_info.status == "oneshot":
                         context = "\n---\n".join(doc_info.content)
                         tasks = [get_oneshot_answer(context, questions[i:i + 3]) for i in range(0, len(questions), 3)]
@@ -410,6 +555,433 @@ async def get_logs_summary(token: str = Depends(verify_admin_token)):
         return LogsSummaryResponse(summary=rag_logger.get_logs_summary())
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get logs summary: {str(e)}")
+
+
+tabular_data_cache = {}
+
+# UI Endpoints
+@app.get("/")
+async def main_page():
+    return FileResponse("templates/index.html")
+
+@app.get("/service-worker.js")
+async def sw():
+    return FileResponse("templates/service-worker.js")
+
+@app.get("/hello")
+def hello():
+    return {'message': 'hello'}
+
+@app.post("/signup")
+def signup(req: SignupRequest):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE email=?", (req.email,))
+    if cursor.fetchone():
+        return {"error": "User already exists"}
+    user_id = str(uuid.uuid4())
+    cursor.execute("INSERT INTO users (email, password, user_id) VALUES (?, ?, ?)",
+                   (req.email, req.password, user_id))
+    conn.commit()
+    conn.close()
+    return {"message": "User created", "user_id": user_id}
+
+@app.post("/login")
+def login(req: LoginRequest):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id, password FROM users WHERE email=?", (req.email,))
+    row = cursor.fetchone()
+    conn.close()
+    if not row or row[1] != req.password:
+        return {"error": "Invalid credentials"}
+    return {"message": "Login successful", "user_id": row[0]}
+
+@app.get("/my_sessions/{user_id}")
+def my_sessions(user_id: str):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT session_id, docs, name, last_updated FROM sessions WHERE user_id=? ORDER BY last_updated DESC", (user_id,))
+    sessions = [{
+        "session_id": row[0],
+        "docs": [doc_id for doc_id in row[1].split(',') if doc_id] if row[1] else [],
+        "name": row[2],
+        "last_updated": row[3]
+    } for row in cursor.fetchall()]
+    conn.close()
+    return {"sessions": sessions}
+
+# FIXED: Quoted "references" in the SELECT statement
+@app.get("/messages/{session_id}")
+def get_messages(session_id: str):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT sender, content, "references" FROM messages WHERE session_id=? ORDER BY timestamp ASC', (session_id,))
+    messages = []
+    for row in cursor.fetchall():
+        references_data = []
+        if row[2]:
+            try:
+                references_data = json.loads(row[2])
+            except (json.JSONDecodeError, TypeError):
+                references_data = []
+        
+        messages.append({
+            "sender": row[0], 
+            "content": row[1],
+            "references": references_data
+        })
+        
+    conn.close()
+    return {"messages": messages}
+
+@app.post("/new_session")
+def new_session(user_id: str = Form(...), session_name: str = Form(...)):
+    session_id = str(uuid.uuid4())
+    current_time = datetime.datetime.utcnow().isoformat()
+    
+    def db_operation(conn):
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO sessions (session_id, user_id, docs, name, last_updated) VALUES (?, ?, ?, ?, ?)",
+                       (session_id, user_id, "", session_name, current_time))
+        conn.commit()
+        return {
+            "session_id": session_id,
+            "docs": [],
+            "name": session_name,
+            "last_updated": current_time
+        }
+    
+    return execute_db_operation(db_operation)
+
+@app.delete("/session/{session_id}")
+def delete_session(session_id: str):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
+    cursor.execute("DELETE FROM sessions WHERE session_id=?", (session_id,))
+    conn.commit()
+    if cursor.rowcount == 0:
+        conn.close()
+        return {"error": "Session not found"}
+    conn.close()
+    return {"message": "Session deleted successfully"}
+
+
+@app.post("/clone")
+def clone(req: CloneRequest):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id, docs, name FROM sessions WHERE session_id=?", (req.session_id,))
+    row = cursor.fetchone()
+    if not row:
+        return {"error": "Invalid session_id"}
+    user_id, docs, old_name = row
+    new_session_id = str(uuid.uuid4())
+    new_name = f"{old_name} (Copy)"
+    current_time = datetime.datetime.utcnow().isoformat()
+    cursor.execute("INSERT INTO sessions (session_id, user_id, docs, name, last_updated) VALUES (?, ?, ?, ?, ?)",
+                   (new_session_id, user_id, docs, new_name, current_time))
+    conn.commit()
+    new_session_data = {"session_id": new_session_id, "name": new_name, "last_updated": current_time}
+    conn.close()
+    return new_session_data
+
+
+@app.post("/upload")
+async def upload(session_id: str = Form(...), files: Optional[List[UploadFile]] = None, url: Optional[str] = Form(None)):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT docs FROM sessions WHERE session_id=?", (session_id,))
+    row = cursor.fetchone()
+    if not row: 
+        conn.close()
+        return {"error": "Invalid session"}
+    
+    doc_ids = []
+    
+    
+    MIME_TYPE_MAP = {
+        'txt': 'text/plain', '.csv': 'text/csv', '.md': 'text/markdown', 
+        'py': 'text/x-python', '.js': 'application/javascript', 
+        'html': 'text/html', '.css': 'text/css', '.json': 'application/json', 
+        'java': 'text/x-java-source', '.pdf': 'application/pdf',
+        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg'
+    }
+
+    if files:
+        unsupported_count = 0
+        for file in files:
+            try:
+                # Read file content into bytes
+                file_content = await file.read()
+                
+                # Use the new FileDownloader to handle the bytes
+                cache_path, file_extension = await document_preprocessor.file_downloader.fetch_file(file_content, file.filename)
+                if cache_path == 'not supported':
+                    unsupported_count += 1
+                    continue
+                # Determine mime type
+                mime_type = file.content_type
+                if mime_type == "application/octet-stream" or not mime_type:
+                    mime_type = MIME_TYPE_MAP.get(file_extension, "application/octet-stream")
+                
+                cursor.execute("INSERT INTO documents (name, path, mime_type) VALUES (?, ?, ?)", 
+                              (file.filename, cache_path, mime_type))
+                doc_id = cursor.lastrowid
+                doc_ids.append(str(doc_id))
+                processed_doc_id, doc_type = await document_preprocessor.process_document((cache_path, file_extension, doc_id), force_reprocess=True, skip_length_check=True)
+                if doc_type == "tabular":
+                    tabular_data_cache[doc_id] = document_preprocessor.get_special_document_details(processed_doc_id)
+                elif doc_type == "oneshot":
+                    pass
+            
+                
+            except Exception as e:
+                logger.error("Failed to process uploaded file", filename=file.filename, error=str(e))
+                conn.close()
+                return {"error": f"Failed to process file {file.filename}: {str(e)}"}
+    
+    elif url:
+        try:
+            result = await document_preprocessor.file_downloader.fetch_file(url)
+            
+            # Handle the result based on what FileDownloader returns
+            if isinstance(result, list) and len(result) == 2 and result[0] == 'not supported':
+                conn.close()
+                return {"error": f"File type '.{result[1]}' is not supported"}
+            
+            cache_path, file_extension = result
+            
+            # If it's just a URL (unsupported type), handle as before
+            if file_extension == "url":
+                conn.close()
+                return {"error": "Unsupported file type from URL"}
+            
+            original_name = Path(urlparse(url).path).name or f"download_{uuid.uuid4()}"
+            
+            # Determine display name and mime type
+            display_name = original_name
+            mime_type = MIME_TYPE_MAP.get(file_extension, "application/octet-stream")
+            cursor.execute("INSERT INTO documents (name, path, mime_type) VALUES (?, ?, ?)", 
+                          (display_name, cache_path, mime_type))
+            doc_id = cursor.lastrowid
+            doc_ids.append(str(doc_id))
+            
+            processed_doc_id, doc_type = await document_preprocessor.process_document((cache_path, file_extension, doc_id), force_reprocess=True, skip_length_check=True)
+            
+            
+        except Exception as e:
+            logger.error("Failed to download from URL", url=url, error=str(e))
+            conn.close()
+            return {"error": f"Failed to fetch URL: {str(e)}"}
+    
+    else:
+        conn.close()
+        return {"error": "No file or URL provided"}
+    
+    # Update session docs (keeping your original logic)
+    docs_list = [doc_id for doc_id in row[0].split(',') if doc_id] if row[0] else []
+    docs_list.extend(doc_ids)
+    current_time = datetime.datetime.utcnow().isoformat()
+    cursor.execute("UPDATE sessions SET docs=?, last_updated=? WHERE session_id=?", 
+                  (",".join(docs_list), current_time, session_id))
+    conn.commit()
+    conn.close()
+    
+    return {"message": "File(s) uploaded", "doc_ids": doc_ids} if unsupported_count == 0 else {"message": "Files Uploaded, skipped unsopported", "doc_ids":doc_ids}
+
+@app.get("/get_doc/{session_id}/{doc_id}")
+def get_doc(session_id: str, doc_id: int):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT docs FROM sessions WHERE session_id=?", (session_id,))
+    row = cursor.fetchone()
+    if not row: conn.close(); return {"error": "Invalid session"}
+    docs_list = row[0].split(",") if row[0] else []
+    if str(doc_id) not in docs_list: conn.close(); return {"error": "Document not part of this session"}
+    cursor.execute("SELECT path, mime_type, name FROM documents WHERE doc_id=?", (doc_id,))
+    doc_row = cursor.fetchone()
+    conn.close()
+    if not doc_row: return {"error": "Invalid document"}
+    file_path, mime_type, file_name = doc_row
+    if not os.path.exists(file_path): return {"error": "File not found on server"}
+    headers = {'Content-Disposition': f'inline; filename="{file_name}"'}
+    return FileResponse(file_path, media_type=mime_type, headers=headers)
+
+
+
+def parse_references(response_text: str) -> List[Dict[str, Any]]:
+    """
+    Parses a semi-structured LLM response string into a structured list of 
+    dictionaries, separating text from its references.
+
+    Args:
+        response_text: The raw string output from the LLM.
+
+    Returns:
+        A list of dictionaries, where each dictionary represents a text segment
+        with its corresponding references.
+    """
+    
+    # Updated regex pattern to match JSON blocks both on same line and new lines
+    # This pattern looks for JSON blocks that:
+    # 1. May have optional whitespace before
+    # 2. Start with { and end with }
+    # 3. Contain typical JSON structure with doc_id, page_num, reference keys
+    # The parentheses create a capturing group to keep the JSON blocks when splitting
+    pattern = r'(\s*\{[^}]*"doc_id"[^}]*"page_num"[^}]*"reference"[^}]*\})'
+    
+    # Split the text by the reference blocks. The result is an interleaved list:
+    # ['text1', '{ref1}', 'text2', '{ref2}', 'text3']
+    parts = re.split(pattern, response_text)
+    
+    # Filter out any empty or whitespace-only strings that might result from the split
+    cleaned_parts = [part for part in parts if part and part.strip()]
+    
+    results: List[Dict[str, Union[str, list]]] = []
+    i = 0
+    while i < len(cleaned_parts):
+        # The current part is assumed to be a text chunk
+        text_chunk = cleaned_parts[i].strip()
+        
+        # Look ahead to see if the next part is a reference block
+        if i + 1 < len(cleaned_parts) and cleaned_parts[i+1].strip().startswith('{'):
+            reference_str = cleaned_parts[i+1].strip()
+            try:
+                # Try to parse the reference string as JSON
+                ref_json = json.loads(reference_str)
+                
+                # Reformat the reference to match the target structure
+                # This includes renaming the 'reference' key to 'text_snippet'
+                formatted_ref = {
+                    "doc_id": ref_json.get("doc_id"),
+                    "page_num": ref_json.get("page_num"),
+                    "text_snippet": ref_json.get("reference")
+                }
+                
+                # Append the text chunk with its parsed reference
+                results.append({
+                    "text": text_chunk,
+                    "references": [formatted_ref]
+                })
+                # We have processed both the text and the reference, so jump ahead by 2
+                i += 2
+                continue
+            except json.JSONDecodeError:
+                # --- SAFE FALLBACK ---
+                # If JSON parsing fails, the LLM generated a malformed reference.
+                # Treat the malformed block as plain text and append it to the
+                # current text chunk.
+                text_chunk += "\n\n" + reference_str
+                # We still consumed two parts, so jump ahead by 2
+                i += 2
+                # The loop will continue, and this combined text_chunk will be
+                # processed in the 'else' block below in the next iteration,
+                # or added as a no-reference block if it's the end.
+                # To handle it now, we can just create the block here.
+                results.append({
+                    "text": text_chunk,
+                    "references": []
+                })
+                continue
+        
+        # If there was no reference block following, or if we are at the end
+        # of the list, this is a text chunk with no references.
+        if text_chunk: # Ensure we don't add empty text blocks
+            results.append({
+                "text": text_chunk,
+                "references": []
+            })
+        
+        # Move to the next part
+        i += 1
+        
+    return results
+
+@app.post("/query")
+async def query(req: QueryRequest):
+    conn = get_db()
+    cursor = conn.cursor()
+    current_time = datetime.datetime.utcnow().isoformat()
+
+    
+    request_id = rag_logger.generate_request_id()
+    rag_logger.start_request_timing(request_id)
+    logger.info("Query", request_id=request_id, session_id = req.session_id)
+    print(f"Query. request id: {request_id} session_id : {req.session_id}")
+    print(f"Question:{req.question}")
+
+    cursor.execute('INSERT INTO messages (message_id, session_id, sender, content, "references", timestamp) VALUES (?, ?, ?, ?, ?, ?)',
+                   (str(uuid.uuid4()), req.session_id, 'user', req.question, None, current_time))
+
+    # RAG Logic
+    cursor.execute("SELECT docs FROM sessions WHERE session_id=?", (req.session_id,))
+    row = cursor.fetchone()
+    if not row or not row[0]: conn.close(); return {"error": "No documents in this session"}
+    doc_ids = [doc_id for doc_id in row[0].split(',') if doc_id]
+    if not doc_ids: conn.close(); return {"error": "No valid documents in this session"}
+
+    extra_chunks = []
+    not_found = []
+
+
+    tabular_MIMES = ['text/csv', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
+
+    for doc_id in doc_ids:
+        cursor.execute("SELECT path, mime_type FROM documents WHERE doc_id=?", (doc_id,))
+        doc_row = cursor.fetchone()
+        if not doc_row: conn.close(); not_found.append(doc_id)
+        file_path, mime_type = doc_row
+        if mime_type in tabular_MIMES:
+            chunks = tabular_data_cache.get(doc_id)
+            if chunks is None:
+                processed_doc_id, doc_type = await document_preprocessor.process_document((file_path, file_path.split('.')[-1], doc_id),  force_reprocess=True)
+                if doc_type == "tabular":
+                    chunks = document_preprocessor.get_special_document_details(processed_doc_id)
+                    tabular_data_cache[doc_id] = chunks
+                else:
+                    chunks = []
+            extra_chunks.extend(chunks)
+        elif mime_type.startswith("image/"):
+            extra_chunks.append(extract_data_from_image(file_path))
+
+    answer, pipeline_timings = await rag_processor.answer_question(
+        question=req.question, doc_ids=doc_ids, logger=rag_logger, request_id=request_id, extra_chunks=extra_chunks
+    )
+    print(f"Answer: {answer}")
+    print("Pipeline Timings: ", json.dumps(pipeline_timings, indent=2))
+
+    formatted_answer = parse_references(answer)
+
+    print("formatted_answer", json.dumps(formatted_answer, indent=2))
+
+    all_references = []
+    full_answer = ""
+    for d in formatted_answer:
+        full_answer += d['text']
+        all_references.extend(d['references'])
+
+
+    # Store assistant response
+    references_json = json.dumps(all_references)
+    print("References: ", references_json)
+    cursor.execute('INSERT INTO messages (message_id, session_id, sender, content, "references", timestamp) VALUES (?, ?, ?, ?, ?, ?)',
+                   (str(uuid.uuid4()), req.session_id, 'assistant', full_answer, references_json, current_time))
+
+    cursor.execute("UPDATE sessions SET last_updated=? WHERE session_id=?", (current_time, req.session_id))
+    conn.commit()
+    conn.close()
+    
+    return {
+        "answer_parts": formatted_answer,
+        "metadata": {"confidence_score": round(random.uniform(0.5, 0.99), 2), "language": "en"}
+    }
+
+
 
 if __name__ == "__main__":
     import uvicorn
