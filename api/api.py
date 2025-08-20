@@ -106,7 +106,32 @@ def init_db():
     conn.close()
 
 def get_db():
-    return sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB_NAME, timeout=30.0)  # 30 second timeout
+    conn.execute("PRAGMA journal_mode=WAL")  # Write-Ahead Logging for better concurrency
+    return conn
+
+def execute_db_operation(operation_func, max_retries=3):
+    """Execute a database operation with retry logic for lock handling"""
+    for attempt in range(max_retries):
+        conn = None
+        try:
+            conn = get_db()
+            result = operation_func(conn)
+            conn.close()
+            return result
+        except sqlite3.OperationalError as e:
+            if conn:
+                conn.close()
+            if "database is locked" in str(e) and attempt < max_retries - 1:
+                time.sleep(0.1 * (2 ** attempt))  # Exponential backoff
+                continue
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        except Exception as e:
+            if conn:
+                conn.close()
+            raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+    
+    raise HTTPException(status_code=500, detail="Database locked after multiple retries")
 
 init_db()
 
@@ -612,21 +637,22 @@ def get_messages(session_id: str):
 
 @app.post("/new_session")
 def new_session(user_id: str = Form(...), session_name: str = Form(...)):
-    conn = get_db()
-    cursor = conn.cursor()
     session_id = str(uuid.uuid4())
     current_time = datetime.datetime.utcnow().isoformat()
-    cursor.execute("INSERT INTO sessions (session_id, user_id, docs, name, last_updated) VALUES (?, ?, ?, ?, ?)",
-                   (session_id, user_id, "", session_name, current_time))
-    conn.commit()
-    new_session_data = {
-        "session_id": session_id,
-        "docs": [],
-        "name": session_name,
-        "last_updated": current_time
-    }
-    conn.close()
-    return new_session_data
+    
+    def db_operation(conn):
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO sessions (session_id, user_id, docs, name, last_updated) VALUES (?, ?, ?, ?, ?)",
+                       (session_id, user_id, "", session_name, current_time))
+        conn.commit()
+        return {
+            "session_id": session_id,
+            "docs": [],
+            "name": session_name,
+            "last_updated": current_time
+        }
+    
+    return execute_db_operation(db_operation)
 
 @app.delete("/session/{session_id}")
 def delete_session(session_id: str):
@@ -801,12 +827,13 @@ def parse_references(response_text: str) -> List[Dict[str, Any]]:
         with its corresponding references.
     """
     
-    # This regex pattern looks for the reference block. The parentheses `()`
-    # create a capturing group. When re.split is used with a capturing group,
-    # the delimiters (the reference blocks themselves) are kept in the resulting list.
-    # \s*[\s\S]*?\s* is a non-greedy way to match any character including newlines
-    # inside the curly braces.
-    pattern = r'(\s*\n\s*\{\s*[\s\S]*?\s*\})'
+    # Updated regex pattern to match JSON blocks both on same line and new lines
+    # This pattern looks for JSON blocks that:
+    # 1. May have optional whitespace before
+    # 2. Start with { and end with }
+    # 3. Contain typical JSON structure with doc_id, page_num, reference keys
+    # The parentheses create a capturing group to keep the JSON blocks when splitting
+    pattern = r'(\s*\{[^}]*"doc_id"[^}]*"page_num"[^}]*"reference"[^}]*\})'
     
     # Split the text by the reference blocks. The result is an interleaved list:
     # ['text1', '{ref1}', 'text2', '{ref2}', 'text3']
@@ -912,9 +939,13 @@ async def query(req: QueryRequest):
         if mime_type in tabular_MIMES:
             chunks = tabular_data_cache.get(doc_id)
             if chunks is None:
-                chunks = document_preprocessor.process_document((file_path, file_path.split('.')[-1], doc_id),  force_reprocess=True)
-                tabular_data_cache[doc_id] = chunks
-                extra_chunks.extend(chunks)
+                processed_doc_id, doc_type = await document_preprocessor.process_document((file_path, file_path.split('.')[-1], doc_id),  force_reprocess=True)
+                if doc_type == "tabular":
+                    chunks = document_preprocessor.get_special_document_details(processed_doc_id)
+                    tabular_data_cache[doc_id] = chunks
+                else:
+                    chunks = []
+            extra_chunks.extend(chunks)
         elif mime_type.startswith("image/"):
             extra_chunks.append(extract_data_from_image(file_path))
 
