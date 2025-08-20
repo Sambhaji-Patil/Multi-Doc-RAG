@@ -291,20 +291,26 @@ function showHighlightStatus(text, type = "info", timeout = 3000) {
       el.className = "highlight-status";
       document.body.appendChild(el);
     }
+
     el.textContent = text;
-    el.classList.remove("success", "error", "searching");
+    el.className = "highlight-status"; // reset
     if (type) el.classList.add(type);
+
     // show
-    el.classList.add("show");
+    el.style.display = "block";
+
     if (timeout > 0) {
       setTimeout(() => {
-        if (el) el.classList.remove("show");
+        if (el) {
+          el.style.display = "none";   
+        }
       }, timeout);
     }
   } catch (e) {
     console.error("showHighlightStatus error:", e);
   }
 }
+
 
 // Find a reference snippet inside the currently loaded document using WebViewer's text search
 // Returns { pageNumber, quads } or null
@@ -508,6 +514,14 @@ function setupEventListeners() {
     .addEventListener("click", () => {
       addDocsModal.style.display = "none";
     });
+  document.getElementById("modalFileInput").addEventListener("change", (e) => {
+    handleFileUpload(e.target.files);
+    addDocsModal.style.display = "none";
+  });
+  document.getElementById("modalUploadUrlBtn").addEventListener("click", () => {
+    uploadFromUrl(document.getElementById("modalUrlInput").value.trim());
+    addDocsModal.style.display = "none";
+  });
   addDocsModal.addEventListener("click", (e) => {
     if (e.target === addDocsModal) {
       addDocsModal.style.display = "none";

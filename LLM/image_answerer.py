@@ -5,6 +5,7 @@ import google.generativeai as genai
 from PIL import Image
 from io import BytesIO
 from typing import List, Union
+from prompt.prompt import prompt_image
 
 from dotenv import load_dotenv
 
@@ -33,15 +34,7 @@ def load_image(image_source: str) -> Image.Image:
 def get_answer_for_image(image_source: str, questions: List[str], retries: int = 3) -> List[str]:
     """Ask questions about an image using Gemini Vision model."""
     image = load_image(image_source)
-    prompt =  """
-    Answer the following questions about the image. Give the answers in the same order as the questions. 
-    Answers should be descriptive. give one answer per line with numbering as "1. 2.  3. ..".
-    Example answer:
-    1. Answer 1, Explaination
-    2. Answer 2, Explaination
-
-    Questions: 
-    """
+    prompt =  prompt_image
     prompt += "\n".join(f"{i+1}. {q}" for i, q in enumerate(questions))
 
     model = genai.GenerativeModel("gemini-1.5-flash")

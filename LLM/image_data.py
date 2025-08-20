@@ -3,6 +3,7 @@ from typing import Union, Optional, Tuple
 import requests
 from PIL import Image
 import google.generativeai as genai
+from prompt.prompt import prompt_image_data
 
 APIKEY = os.getenv("GEMINI_API_KEY_IMAGE")
 if not APIKEY:
@@ -99,19 +100,7 @@ def extract_data_from_image(
 
     img_bytes, mime = _read_image_and_mime(image)
 
-    system_prompt = textwrap.dedent("""
-You are an expert AI assistant for a robust RAG (Retrieval-Augmented Generation) system.
-Your task is to analyze the provided image and extract all relevant informations.
-
-Based on the image content, please do the following:
-
-1.  **Identify the image contents** (e.g., 'table', 'bar chart', 'line graph', 'photograph', 'diagram').
-2.  **Extract all text verbatim (OCR)** if any is present.
-3.  **If it is a table:** Convert the entire table into a clean, pipe-delimited Markdown format.
-4.  **If it is a chart or graph:** Do not just describe it. Summarize the key insights, trends, and main data points. For example, "The bar chart shows a 50% increase in Q4 sales compared to Q1."
-5.  **If it is a general photograph or diagram:** Provide a detailed caption describing what is shown.
-                        
-    """)
+    system_prompt = textwrap.dedent(prompt_image_data)
 
     image_part = {"mime_type": mime, "data": img_bytes}
 

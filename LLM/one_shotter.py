@@ -15,6 +15,7 @@ from functools import lru_cache
 from dataclasses import dataclass
 import json
 import threading
+from prompt.prompt import prompt_oneshot
 
 import os
 from dotenv import load_dotenv
@@ -261,35 +262,8 @@ def assess_link_relevance_enhanced(context: str, questions: List[str], found_url
     try:
         llm = get_gemini_llm(temperature=0.1)
         
-        # Create a more detailed prompt
-        prompt = ChatPromptTemplate.from_messages([
-            ("human", """You are an expert content analyst. Analyze whether the current context can fully answer all questions, and which URLs might contain essential additional information.
-
-CURRENT CONTEXT:
-{context}
-
-QUESTIONS TO ANSWER:
-{questions}
-
-FOUND URLs:
-{urls}
-
-TASK: Determine if you can fully answer ALL questions using ONLY the current context. Be thorough and conservative.
-
-If ANY question lacks sufficient detail or the context seems incomplete, mark can_answer_without_links as false.
-
-Analyze each URL to determine if it likely contains relevant information for answering the questions.
-
-Respond in this EXACT JSON format:
-{{
-    "relevant_links": [
-        {{"url": "exact_url_here", "reason": "specific reason why this URL is relevant"}}
-    ],
-    "irrelevant_links": ["url1", "url2"],
-    "can_answer_without_links": false,
-    "explanation": "Clear explanation of your assessment"
-}}""")
-        ])
+        # prompt imported from prompt library
+        prompt = prompt_oneshot
         
         # Format inputs nicely
         questions_text = "\n".join([f"{i+1}. {q.strip()}" for i, q in enumerate(questions[:5])])

@@ -1,0 +1,18 @@
+{
+  "doc_id": "4",
+  "document_url": "files\\f960fb9587a2ee26ffe1bbaeb33a37826460b0e95962861899743d948ceee150.pdf",
+  "chunk_count": 66,
+  "total_chars": 104759,
+  "total_words": 15800,
+  "avg_chunk_size": 1587.2575757575758,
+  "processed_at": 35451.171,
+  "embedding_model": "all-MiniLM-L6-v2",
+  "chunk_size": 1600,
+  "chunk_overlap": 400,
+  "collection_name": "unified_documents",
+  "processing_config": {
+    "chunk_size": 1600,
+    "chunk_overlap": 400,
+    "embedding_model": "all-MiniLM-L6-v2"
+  }
+}

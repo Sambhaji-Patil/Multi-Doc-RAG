@@ -815,8 +815,8 @@ vertical-align: middle;
 }
 .highlight-status {
 position: fixed;
-top: 80px;
-right: 20px;
+top: 180px;
+right: 250px;
 background: var(--panel-bg);
 border: 1px solid var(--panel-border);
 border-radius: 8px;

@@ -9,6 +9,7 @@ from typing import List
 from LLM.lite_llm import generate_lite
 from config.config import ENABLE_QUERY_EXPANSION, QUERY_EXPANSION_COUNT
 from logger.custom_logger import CustomLogger
+from prompt.prompt import query_exp
 
 # module-level logger
 logger = CustomLogger().get_logger(__file__)
@@ -26,33 +27,7 @@ class QueryExpansionManager:
             return [original_query]
         
         try:
-            expansion_prompt = f"""Analyze this question and break it down into exactly {QUERY_EXPANSION_COUNT} specific, focused sub-questions that can be searched independently in a document. Each sub-question should target a distinct piece of information or process.
-
-For complex questions with multiple parts, identify:
-1. Different processes or procedures mentioned
-2. Specific information requests (emails, contact details, forms, etc.)
-3. Different entities or subjects involved
-4. Sequential steps that might be documented separately
-5. Don't Include any extra messages or comments.
-
-Original question: {original_query}
-
-Break this into exactly {QUERY_EXPANSION_COUNT} focused search queries that target different aspects:
-
-Examples of good breakdown:
-- "What is the dental claim submission process?"
-- "How to update surname/name in policy records?"
-- "What are the company contact details and grievance email?"
-
-
-Provide only {QUERY_EXPANSION_COUNT} focused sub-questions, one per line, without numbering or additional formatting:
-Example Reponse:
-Here are the focused sub queries
-subquery1
-subquery2 (if exists)
-...
-
-"""
+            expansion_prompt = query_exp(original_query,QUERY_EXPANSION_COUNT)
 
             response = generate_lite(
                 expansion_prompt,
