@@ -40,6 +40,7 @@ QUERY_EXPANSION_COUNT = 3 #via LLM
 
 RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 EMBEDDING_MODEL ="all-MiniLM-L6-v2"  
+# EMBEDDING_MODEL ="BAAI/bge-large-en"  
 
 BATCH_SIZE = 8 #for embeddings generation
 
