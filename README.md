@@ -19,9 +19,35 @@ tags: [rag, document-analysis, llm, enterprise, ai]
 ![FastAPI](https://img.shields.io/badge/FastAPI-ready-green.svg)
 ![Docker](https://img.shields.io/badge/docker-ready-blue.svg)
 
-**🚀 Production-ready API • 📄 8+ Document Formats • 🤖 Multi-LLM Support • ⚡ Advanced Retrieval**
+**🚀 Production-ready API •**3. OCR Space API Issues**
+```bash
+# Verify OCR API key
+export OCR_SPACE_API_KEY="your_key"
 
-[**Try the API**](#-quick-start) | [**Full Docs**](https://github.com/Team-DevBytes/ShastraDocs2) | [**GitHub**](https://github.com/Team-DevBytes/ShastraDocs2)
+# Test OCR endpoint
+curl -X POST "https://api.ocr.space/parse/image" \
+  -F "apikey=your_key" \
+  -F "url=https://example.com/image.jpg"
+```
+
+**4. Memory Issues**
+```python
+# Reduce batch sizes in config.py
+BATCH_SIZE = 16
+CHUNK_SIZE = 1200
+```
+
+**5. Web Interface Issues**
+```bash
+# Check static file serving
+curl http://localhost:7860/static/styles.css
+
+# Verify templates directory
+ls templates/
+# Should contain: index.html, service-worker.js
+```ormats • 🤖 Multi-LLM Support • ⚡ Advanced Retrieval**
+
+[**Try the API**](#-quick-start) | [**Full Docs**](https://github.com/Sambhaji-Patil/Multi-Doc-RAG) | [**GitHub**](https://github.com/Sambhaji-Patil/Multi-Doc-RAG)
 
 </div>
 
@@ -37,7 +63,9 @@ ShastraDocs v2 is a production-ready, modular RAG system designed for comprehens
 - **⚡ Intelligent Processing**: Automatic format detection with specialized handlers
 - **🔄 Multi-Provider LLM**: Smart rotation between Groq, Gemini, and OpenAI with rate limit handling
 - **🔍 Advanced Retrieval**: Hybrid search with BM25 + semantic search and cross-encoder reranking
-- **📊 Production Features**: Comprehensive logging, monitoring, and health checks
+- **�️ LanceDB Vector Storage**: High-performance vector database with unified document collections
+- **🌐 Web Interface**: Modern PWA with document viewer and interactive chat
+- **�📊 Production Features**: Comprehensive logging, monitoring, and health checks
 - **🐳 Docker Ready**: Containerized deployment with HuggingFace Spaces optimization
 - **💰 Cost Effective**: Process 200+ questions at $0 cost using free tier rotation
 
@@ -55,7 +83,7 @@ ShastraDocs v2 is a production-ready, modular RAG system designed for comprehens
 ├─────────────────────────────────────────────────────────────────┤
 │   Document Preprocessing (8+ Formats, OCR, Table Extraction)    │
 ├─────────────────────────────────────────────────────────────────┤
-│    Vector Storage & Search (Qdrant, Hybrid Search, Caching)     │
+│    Vector Storage & Search (LanceDB, Hybrid Search, Caching)    │
 ├─────────────────────────────────────────────────────────────────┤
 │  Comprehensive Logging & Monitoring (Request Tracking, Stats)   │
 └─────────────────────────────────────────────────────────────────┘
@@ -64,52 +92,79 @@ ShastraDocs v2 is a production-ready, modular RAG system designed for comprehens
 ## 📦 Project Structure
 
 ```
-shastradocs-v2/
+Multi-Doc-RAG/
 ├── 📁 api/                          # FastAPI REST API
 │   ├── __init__.py
-│   └── api.py                       # Main API endpoints and authentication
+│   ├── api.py                       # Main API endpoints and authentication
+│   └── README.md                    # API documentation
 ├── 📁 config/                       # Centralized configuration
 │   ├── __init__.py
-│   └── config.py                    # Auto-detecting multi-provider configs
+│   ├── config.py                    # Auto-detecting multi-provider configs
+│   └── README.md                    # Configuration documentation
 ├── 📁 LLM/                         # Multi-provider LLM management
 │   ├── __init__.py
 │   ├── llm_handler.py              # Unified multi-provider handler
 │   ├── one_shotter.py              # Enhanced QA with web scraping
 │   ├── image_answerer.py           # Specialized image analysis
+│   ├── image_data.py               # Image data extraction utilities
 │   ├── tabular_answer.py           # Structured data handler
-│   └── lite_llm.py                 # Lightweight handler
+│   ├── lite_llm.py                 # Lightweight handler
+│   └── README.md                   # LLM documentation
 ├── 📁 RAG/                         # Advanced retrieval system
 │   ├── __init__.py
 │   ├── advanced_rag_processor.py   # Main RAG orchestrator
+│   ├── README.md                   # RAG documentation
+│   ├── rag_embeddings/             # Embedding storage directory
+│   │   ├── 1_metadata.json
+│   │   └── 4_metadata.json
 │   └── rag_modules/                # Modular RAG components
+│       ├── __init__.py
 │       ├── query_expansion.py      # Query decomposition
 │       ├── embedding_manager.py    # Semantic embeddings
 │       ├── search_manager.py       # Hybrid search engine
 │       ├── reranking_manager.py    # Cross-encoder reranking
 │       ├── context_manager.py      # Context assembly
 │       └── answer_generator.py     # LLM answer generation
-├── 📁 shared/                         # Advanced retrieval system
+├── 📁 shared/                      # Shared utilities
 │   ├── __init__.py
 │   └── model_manager.py             # Ensures one embedding model instance is created
 ├── 📁 preprocessing/               # Document processing pipeline
 │   ├── __init__.py
 │   ├── preprocessing.py            # Main entry point and CLI
+│   ├── README.md                   # Preprocessing documentation
 │   └── preprocessing_modules/      # Specialized extractors
+│       ├── __init__.py
 │       ├── modular_preprocessor.py # Main orchestrator
 │       ├── file_downloader.py      # Universal file downloading
+│       ├── file_readers.py         # Generic file readers
 │       ├── pdf_extractor.py        # Advanced PDF processing
+│       ├── pdf_downloader.py       # PDF-specific downloading
 │       ├── docx_extractor.py       # Word document handling
 │       ├── pptx_extractor.py       # PowerPoint processing
 │       ├── xlsx_extractor.py       # Excel with OCR support
 │       ├── image_extractor.py      # Image and table extraction
 │       ├── text_chunker.py         # Smart text chunking
 │       ├── embedding_manager.py    # Batch embedding generation
-│       ├── vector_storage.py       # Qdrant integration
+│       ├── vector_storage.py       # LanceDB integration
 │       └── metadata_manager.py     # Document metadata
+├── 📁 prompt/                      # System prompts
+│   └── prompt.py                   # Centralized prompt templates
 ├── 📁 logger/                      # Advanced logging system
 │   ├── __init__.py
-│   └── logger.py                   # In-memory logging with analytics
+│   ├── logger.py                   # In-memory logging with analytics
+│   ├── custom_logger.py            # Structured logging utilities
+│   └── README.md                   # Logging documentation
+├── 📁 exception/                   # Custom exceptions
+│   ├── __init__.py
+│   └── custom_exception.py         # Project-specific exceptions
+├── 📁 static/                      # Frontend assets
+│   ├── scripts.js                  # Main application JavaScript
+│   └── styles.css                  # Application styles
+├── 📁 templates/                   # HTML templates
+│   ├── index.html                  # Main web interface
+│   └── service-worker.js           # PWA service worker
 ├── 📄 app.py                       # Application entry point
+├── 📄 main.py                      # Alternative entry point for HuggingFace Spaces
 ├── 📄 startup.sh                   # Production startup script
 ├── 📄 Dockerfile                   # Container configuration
 ├── 📄 requirements.txt             # Python dependencies
@@ -169,9 +224,10 @@ shastradocs-v2/
 **Context-Aware Generation**
 - **Multi-perspective Context**: Equal representation from sub-queries
 - **Enhanced Prompting**: Specialized prompts for policy documents
+- **Centralized Prompt Management**: Organized prompt templates in dedicated module
 - **Error Handling**: Graceful handling of edge cases
 
-### 🌐 Production-Ready API
+## 🌐 Production-Ready API
 
 **REST Endpoints**
 - `POST /hackrx/run` - Document processing and Q&A
@@ -179,6 +235,15 @@ shastradocs-v2/
 - `POST /preprocess` - Batch document preprocessing (admin)
 - `GET /logs` - Request logs export with filtering (admin)
 - `GET /collections` - List processed documents (admin)
+- `GET /` - Web interface for interactive document analysis
+- `GET /service-worker.js` - PWA service worker
+
+**Web Interface Features**
+- **Progressive Web App**: Modern, responsive interface with offline capabilities
+- **Document Viewer**: Integrated PDF/document viewer with highlighting
+- **Interactive Chat**: Real-time question answering with document references
+- **Session Management**: User sessions with document upload and management
+- **Visual Feedback**: Answer highlighting and source referencing
 
 **Security Features**
 - Bearer token authentication for main endpoints
@@ -206,6 +271,20 @@ shastradocs-v2/
 - Database connection health
 - Resource usage monitoring
 
+### 🗄️ Database Architecture
+
+**LanceDB Vector Storage**
+- **High-Performance**: Apache Arrow-based columnar storage
+- **Unified Collections**: Single table for multi-document retrieval
+- **Advanced Filtering**: Document-based filtering for targeted search
+- **Scalable**: Efficient storage and retrieval for large document collections
+
+**SQLite User Management**
+- **User Sessions**: Authentication and session management
+- **Document Tracking**: User-document associations
+- **Lightweight**: Embedded database for metadata storage
+- **Portable**: Self-contained database files for easy deployment
+
 ## ⚙️ Quick Setup
 
 ### Prerequisites
@@ -220,13 +299,20 @@ shastradocs-v2/
 1. **Clone Repository**
    ```bash
    git clone <repository-url>
-   cd shastradocs-v2
+   cd Multi-Doc-RAG
    ```
 
 2. **Install Dependencies**
    ```bash
    pip install -r requirements.txt
    ```
+   
+   **Key Dependencies:**
+   - `lancedb` - High-performance vector database
+   - `sentence-transformers` - Embedding models
+   - `fastapi` - Modern web framework
+   - `rank-bm25` - Keyword search
+   - `langchain` - LLM framework integration
 
 3. **Configure Environment**
    Create `.env` file with your API keys:
@@ -262,17 +348,22 @@ shastradocs-v2/
    ```bash
    python app.py
    ```
+   
+   **Access Points:**
+   - API: `http://localhost:7860`
+   - Web Interface: `http://localhost:7860`
+   - Health Check: `http://localhost:7860/health`
 
 ### 🐳 Docker Deployment
 
 1. **Build Image**
    ```bash
-   docker build -t shastradocs-v2 .
+   docker build -t multi-doc-rag .
    ```
 
 2. **Run Container**
    ```bash
-   docker run -p 7860:7860 --env-file .env shastradocs-v2
+   docker run -p 7860:7860 --env-file .env multi-doc-rag
    ```
 
 ### ☁️ HuggingFace Spaces Deployment
@@ -293,7 +384,7 @@ import httpx
 import asyncio
 
 async def analyze_document():
-    url = "http://localhost:8000/hackrx/run"
+    url = "http://localhost:7860/hackrx/run"
     headers = {"Authorization": "Bearer your_token"}
     
     data = {
@@ -326,7 +417,7 @@ asyncio.run(analyze_document())
 
 ```bash
 # Process document with questions
-curl -X POST "http://localhost:8000/hackrx/run" \
+curl -X POST "http://localhost:7860/hackrx/run" \
   -H "Authorization: Bearer your_token" \
   -H "Content-Type: application/json" \
   -d '{
@@ -338,17 +429,44 @@ curl -X POST "http://localhost:8000/hackrx/run" \
   }'
 
 # Check system health
-curl -X GET "http://localhost:8000/health"
+curl -X GET "http://localhost:7860/health"
 
 # Get request logs (admin)
-curl -X GET "http://localhost:8000/logs?minutes=60&limit=50" \
+curl -X GET "http://localhost:7860/logs?minutes=60&limit=50" \
   -H "Authorization: Bearer 9420689497"
 
 # Preprocess document (admin)
-curl -X POST "http://localhost:8000/preprocess" \
+curl -X POST "http://localhost:7860/preprocess" \
   -H "Authorization: Bearer 9420689497" \
   -d "document_url=https://example.com/document.pdf&force=false"
 ```
+
+### 🌐 Web Interface Usage
+
+The system includes a modern web interface accessible at the root URL:
+
+**Features:**
+- **Document Upload**: Drag-and-drop file upload with progress tracking
+- **Interactive Chat**: Real-time question answering with typing indicators
+- **Document Viewer**: Integrated PDF viewer with highlighting capabilities
+- **Session Management**: User authentication and document organization
+- **Progressive Web App**: Offline capabilities and mobile-friendly design
+
+**Access the Interface:**
+```bash
+# Start the server
+python app.py
+
+# Open in browser
+http://localhost:7860
+```
+
+**Web Interface Capabilities:**
+- Upload documents (PDF, DOCX, PPTX, images)
+- Ask questions and get highlighted answers
+- View source references in the document
+- Manage multiple document sessions
+- Export conversation history
 
 ### CLI Usage
 
@@ -411,7 +529,7 @@ The system automatically selects optimal processing modes:
 
 **1. Advanced RAG Processing**
 - Complex documents requiring full pipeline
-- Vector database storage and hybrid search
+- Vector database storage and hybrid search with LanceDB
 - Best for policy documents, manuals
 
 **2. OneShot Processing**
@@ -446,6 +564,8 @@ The system automatically selects optimal processing modes:
 ### Resource Usage
 - **Memory**: 500MB-1GB (model dependent)
 - **CPU**: Moderate during processing, minimal idle
+- **Storage**: LanceDB tables stored locally with efficient columnar format
+- **Disk I/O**: Optimized with Apache Arrow for fast data access
 
 ## 🛠️ Troubleshooting
 
@@ -468,9 +588,23 @@ llm_handler.reset_cooldowns()
 curl -I "https://your-document-url.pdf"
 
 # Force reprocessing
-curl -X POST "http://localhost:8000/preprocess" \
+curl -X POST "http://localhost:7860/preprocess" \
   -H "Authorization: Bearer admin_token" \
   -d "document_url=your_url&force=true"
+```
+
+**3. LanceDB Connection Issues**
+```python
+# Check LanceDB database status
+from pathlib import Path
+import lancedb
+
+db_path = Path("RAG/rag_embeddings/unified_documents.lance")
+if db_path.exists():
+    db = lancedb.connect(db_path)
+    print(f"Tables: {db.table_names()}")
+else:
+    print("Database not found - run document preprocessing first")
 ```
 
 **3. OCR Space API Issues**
@@ -629,7 +763,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 - **HuggingFace**: For model hosting and Spaces platform
-- **Qdrant**: For vector database capabilities  
+- **LanceDB**: For high-performance vector database capabilities  
 - **FastAPI**: For modern API framework
 - **SentenceTransformers**: For embedding models
 - **Community Contributors**: For feedback and improvements
@@ -640,6 +774,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **ShastraDocs v2** - *Enterprise-grade RAG system for intelligent document analysis*
 
-[🌟 Star on GitHub](https://github.com/Team-DevBytes/ShastraDocs2) 
+[🌟 Star on GitHub](https://github.com/Sambhaji-Patil/Multi-Doc-RAG) 
 
 </div>
