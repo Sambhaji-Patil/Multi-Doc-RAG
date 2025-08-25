@@ -12,12 +12,3 @@ nlpaueb/*
 test
 RAG/rag_embeddings/[a-z]*
 .cache/
-*test*
-docs
-examples
-logs
-
-database.db
-files
-
-static/lib/apryse
