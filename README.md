@@ -1,5 +1,5 @@
 ---
-title: "ShastraDocs"
+title: "ShastraDocsv2"
 emoji: "📚"
 colorFrom: blue
 colorTo: purple
