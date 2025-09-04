@@ -9,7 +9,7 @@ GROQ_API_KEY_LITE = os.getenv("GROQ_API_KEY_LITE", "")
 if GROQ_API_KEY_LITE == "":
     GROQ_API_KEY_LITE = os.getenv("GROQ_API_KEY_LITE") 
 
-GROQ_MODEL_LITE = "llama3-8b-8192"
+GROQ_MODEL_LITE = "llama-3.1-8b-instant"
 
 assert GROQ_API_KEY_LITE, "GROQ KEY LITE NOT SET"
 

@@ -12,3 +12,8 @@ nlpaueb/*
 test
 RAG/rag_embeddings/[a-z]*
 .cache/
+static/lib
+rag_embeddings/
+logs/
+files
+database.db
