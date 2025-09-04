@@ -756,7 +756,7 @@ We welcome contributions! Please follow these guidelines:
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-**Copyright (c) 2025 Rahul Samedavar and Sambhaji Patil**
+**Copyright (c) 2025 Sambhaji Patil and Rahul Samedavar**
 
 ## 🙏 Acknowledgments
 
