@@ -19,33 +19,7 @@ tags: [rag, document-analysis, llm, enterprise, ai]
 ![FastAPI](https://img.shields.io/badge/FastAPI-ready-green.svg)
 ![Docker](https://img.shields.io/badge/docker-ready-blue.svg)
 
-**🚀 Production-ready API •**3. OCR Space API Issues**
-```bash
-# Verify OCR API key
-export OCR_SPACE_API_KEY="your_key"
-
-# Test OCR endpoint
-curl -X POST "https://api.ocr.space/parse/image" \
-  -F "apikey=your_key" \
-  -F "url=https://example.com/image.jpg"
-```
-
-**4. Memory Issues**
-```python
-# Reduce batch sizes in config.py
-BATCH_SIZE = 16
-CHUNK_SIZE = 1200
-```
-
-**5. Web Interface Issues**
-```bash
-# Check static file serving
-curl http://localhost:7860/static/styles.css
-
-# Verify templates directory
-ls templates/
-# Should contain: index.html, service-worker.js
-```ormats • 🤖 Multi-LLM Support • ⚡ Advanced Retrieval**
+**🚀 Production-ready API • 📄 8+ Document Formats • 🤖 Multi-LLM Support • ⚡ Advanced Retrieval**
 
 [**Try the API**](#-quick-start) | [**Full Docs**](https://github.com/Sambhaji-Patil/Multi-Doc-RAG) | [**GitHub**](https://github.com/Sambhaji-Patil/Multi-Doc-RAG)
 
@@ -63,9 +37,9 @@ ShastraDocs v2 is a production-ready, modular RAG system designed for comprehens
 - **⚡ Intelligent Processing**: Automatic format detection with specialized handlers
 - **🔄 Multi-Provider LLM**: Smart rotation between Groq, Gemini, and OpenAI with rate limit handling
 - **🔍 Advanced Retrieval**: Hybrid search with BM25 + semantic search and cross-encoder reranking
-- **�️ LanceDB Vector Storage**: High-performance vector database with unified document collections
+- **🗃️ LanceDB Vector Storage**: High-performance vector database with unified document collections
 - **🌐 Web Interface**: Modern PWA with document viewer and interactive chat
-- **�📊 Production Features**: Comprehensive logging, monitoring, and health checks
+- **📊 Production Features**: Comprehensive logging, monitoring, and health checks
 - **🐳 Docker Ready**: Containerized deployment with HuggingFace Spaces optimization
 - **💰 Cost Effective**: Process 200+ questions at $0 cost using free tier rotation
 
@@ -607,7 +581,21 @@ else:
     print("Database not found - run document preprocessing first")
 ```
 
-**3. OCR Space API Issues**
+**3. LanceDB Connection Issues**
+```python
+# Check LanceDB database status
+from pathlib import Path
+import lancedb
+
+db_path = Path("RAG/rag_embeddings/unified_documents.lance")
+if db_path.exists():
+    db = lancedb.connect(db_path)
+    print(f"Tables: {db.table_names()}")
+else:
+    print("Database not found - run document preprocessing first")
+```
+
+**4. OCR Space API Issues**
 ```bash
 # Verify OCR API key
 export OCR_SPACE_API_KEY="your_key"
@@ -618,11 +606,21 @@ curl -X POST "https://api.ocr.space/parse/image" \
   -F "url=https://example.com/image.jpg"
 ```
 
-**4. Memory Issues**
+**5. Memory Issues**
 ```python
 # Reduce batch sizes in config.py
 BATCH_SIZE = 16
 CHUNK_SIZE = 1200
+```
+
+**6. Web Interface Issues**
+```bash
+# Check static file serving
+curl http://localhost:7860/static/styles.css
+
+# Verify templates directory
+ls templates/
+# Should contain: index.html, service-worker.js
 ```
 
 ### Debug Mode
@@ -641,11 +639,11 @@ from api.api import app
 
 ```bash
 # System health check
-curl http://localhost:8000/health
+curl http://localhost:7860/health
 
 # Detailed logs export
 curl -H "Authorization: Bearer admin_token" \
-  "http://localhost:8000/logs?minutes=60" > debug_logs.json
+  "http://localhost:7860/logs?minutes=60" > debug_logs.json
 ```
 
 ## 🚀 Production Deployment
